@@ -15,13 +15,13 @@ const compression = require("compression");
 const minify      = require("express-minify");
 
 /* INTERNAL LIBRARIES */
-const server = require("./server/server.js");
-const logger = require("./server/logger.js");
+const server = new (require("./app/control.js"))();
+const logger = require("./app/logger.js");
 
 /* APPLICATION INITALIZATION */
 // specify process name, for eventually recognize it later
 process.title = "fdp_tickets";
-// process.env.NODE_ENV = "development";
+// process.env.NODE_ENV = "production";
 // Initialize express application
 const app = express();
 
@@ -43,7 +43,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // enable session management
 app.use(session({
   // string with hash session cookie
-  secret: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  secret: '946f503c568fdf64d095c9121ae652b3815df5ec95c1a4f11d7b6f0ae180c863',
   // don't save again a session if
   // it isn't modify from previous request
   resave: false,
@@ -55,7 +55,7 @@ app.use(session({
     sameSite : true,
     // need a certificate to only go over https
     secure: false,
-    maxAge: 3600000,
+    maxAge: 10800000,
   },
   // set session cookie name
   name: "nsession"
@@ -65,28 +65,31 @@ app.use(session({
 /* MANAGE API */
 // these let user to skip login phase
 // if it has already logged in
-app.get("/", server.isLoggedIn);
+app.get("/", server.isLoggedIn, server.startPage);
 
-// serve private default page
-app.get("/home", server.requireLogin, server.home);
-
-// set everything under /home/ path
-// to be protected by unauthorized user
-app.get("/home/*", server.requireLogin);
-
-// list tickets status
-app.get("/home/tickets", server.getTickets);
-// get specific ticket status
-app.get("/home/tickets/:num", server.checkTicket);
-
-// set an user as entered to the event
-app.post("/home/tickets/entered", server.entered);
-// add a ticket to dataset
-// app.post("/home/tickets/sell", server.checkAdmin, server.sellTicket);
 // process login request checking user credentials
 app.post("/login", server.login);
 // process logout request
 app.get("/logout", server.logout);
+// serve private default page
+app.get("/home", server.requireLogin, server.home);
+//
+// set everything under /home/ path
+// to be protected by unauthorized user
+app.get("/home/*", server.requireLogin);
+
+// check that only admin can sell new tickets
+app.use("/home/admin/*", server.checkAdmin);
+//
+// // list tickets status
+app.get("/home/tickets", server.getTickets);
+// // get specific ticket status
+app.get("/home/tickets/:ticket_num", server.ticketDetails);
+//
+// // set an user as entered to the event
+app.post("/home/tickets/entered", server.entered);
+// // add a ticket to dataset
+// // app.post("/home/admin/tickets/sell", server.checkAdmin, server.sellTicket);
 /*===================*/
 
 /* MANAGE PUBLIC RESOURCE */
@@ -98,5 +101,5 @@ app.use('/lib/pavilion', express.static(path.join(__dirname, 'node_modules/pavil
 /* APPLICATION STARTUP */
 app.listen(process.env.PORT || app.get("port"), function () {
   // debug info => initial message with listening port
-  logger.info("Website listening on port " + app.get("port") + ".");
+  console.log("Website listening on port " + app.get("port"));
 });

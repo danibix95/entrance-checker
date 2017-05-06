@@ -1,0 +1,25 @@
+//- Incorporate default page layout
+extends layout.pug
+
+//- edit page title
+block title
+  title= "Login"
+
+//- insert page content
+block content
+  .container
+    .row
+      div(class="col-pp-100 col-tl-50 offset-tl-25 offset-dt-25")
+        img(class="b-logo" src="/butterfly.svg")
+        h2(class="text-center title")= "Festa di Primavera 2017"
+        p(class="text-center")= "Tickets Manager"
+
+        form(action="/login" method="POST")
+          .form-part
+            label(for="username")= "Username"
+            input(type="text" id="username" name="username" placeholder="Insert your username" autofocus)
+          .form-part
+            label(for="password")= "Password"
+            input(type="password" id="password" name="password" placeholder="Insert your password")
+          .form-part
+            button(class="button button-default button-full-width h3" type="submit")= "Login"

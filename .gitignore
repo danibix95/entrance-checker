@@ -38,3 +38,7 @@ jspm_packages
 
 # Jetbrains files
 .idea
+
+# Other files
+data
+*.sql

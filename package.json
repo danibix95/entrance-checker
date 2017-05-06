@@ -27,6 +27,10 @@
     "express-minify": "^0.2.0",
     "express-session": "^1.15.2",
     "path": "^0.12.7",
-    "pug": "^2.0.0-beta11"
+    "pg": "^6.1.5",
+    "pg-pool": "^1.7.1",
+    "pug": "^2.0.0-beta11",
+    "url": "^0.11.0",
+    "winston": "^2.3.1"
   }
 }
