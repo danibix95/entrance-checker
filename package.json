@@ -1,0 +1,36 @@
+{
+  "name": "fdp-tickets",
+  "version": "0.0.1",
+  "description": "Tickets manager for Festa di Privamera event",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danibix95/FdP_tickets.git"
+  },
+  "keywords": [
+    "FdP",
+    "tickets"
+  ],
+  "author": "Daniele Bissoli",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/danibix95/FdP_tickets/issues"
+  },
+  "homepage": "https://github.com/danibix95/FdP_tickets#readme",
+  "dependencies": {
+    "body-parser": "^1.17.1",
+    "compression": "^1.6.2",
+    "express": "^4.15.2",
+    "express-minify": "^0.2.0",
+    "express-session": "^1.15.2",
+    "path": "^0.12.7",
+    "pg": "^6.1.5",
+    "pg-pool": "^1.7.1",
+    "pug": "^2.0.0-beta11",
+    "url": "^0.11.0",
+    "winston": "^2.3.1"
+  }
+}

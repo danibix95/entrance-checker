@@ -1,0 +1,56 @@
+//- Incorporate default page layout
+extends layout.pug
+
+//- edit page title
+block title
+  title= "Check Ticket"
+
+//- insert page content
+block content
+  //- status can be OK=0, UNSOLD=1, ERROR=2
+  case status
+    when 0
+      div(class="cover ok")
+        .container
+          .row
+            .col-pp-100
+              h1= "OK"
+              //- the ticket number
+              p(id="ticket") Ticket N°: <strong>#{tnum}</strong>
+              //- the ticket type 7 or 10€
+              p(id="ttype") Ticket Type: <strong>#{ttype} €</strong>
+              //- attendee data
+              p(id="fname") First Name: <em>#{fname}</em>
+              p(id="lname") Last Name: <em>#{lname}</em>
+          .row
+            .col-pp-100
+              a(href="/home" class="button button-outlined button-full-width h4 ttitle")= "Home"
+    when 1
+      div(class="cover unsold")
+        .container
+          .row
+            .col-pp-100
+              h1 "Ticket <strong>#{tnum}</strong> Unsold"
+          .row
+            .col-pp-100
+              a(href="/home" class="button button-outlined button-full-width h4 ttitle")= "Home"
+    when 2
+      div(class="cover error")
+        .container
+          .row
+            .col-pp-100
+              h1 "Ticket <strong>#{tnum}</strong> already entered!"
+              p "Entered time:" <em>#{date}</em>
+          .row
+            .col-pp-100
+              a(href="/home" class="button button-outlined button-full-width btn-black h4 ttitle")= "Home"
+    default
+      div(class="cover noop")
+        .container
+          .row
+            .col-pp-100
+              h1 "Does <strong>#{tnum}</strong> look like a ticket number? :)"
+          .row
+            .col-pp-100
+              a(href="/home" class="button button-outlined button-full-width btn-black h4 ttitle")= "Home"
+
