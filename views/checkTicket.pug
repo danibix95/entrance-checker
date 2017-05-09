@@ -23,34 +23,41 @@ block content
               p(id="fname") First Name: <em>#{fname}</em>
               p(id="lname") Last Name: <em>#{lname}</em>
           .row
-            .col-pp-100
-              a(href="/home" class="button button-outlined button-full-width h4 ttitle")= "Home"
+            div(class="col-pp-100 col-tl-60 offset-tl-20 offset-dt-20")
+              .row
+                form(action="/home/tickets/entered/commit" method="POST" class="col-pp-100 col-tl-50")
+                  .form-part
+                    //- set input field with ticket number as value (for POST request)
+                    input(type="hidden" name="tnum" value=`${tnum}`)
+                    button(class="button button-default button-full-width h4 ttitle" type="submit" autofocus)= "Conferma"
+                .div(class="col-pp-100 col-tl-50")
+                  a(href="/home" class="button button-outlined button-full-width h4 ttitle text-center")= "Cancel"
     when 1
       div(class="cover unsold")
         .container
           .row
             .col-pp-100
-              h1 "Ticket <strong>#{tnum}</strong> Unsold"
+              h1 Ticket <strong>#{tnum}</strong> Unsold
           .row
-            .col-pp-100
-              a(href="/home" class="button button-outlined button-full-width h4 ttitle")= "Home"
+            div(class="col-pp-100 col-tl-60 offset-tl-20 offset-dt-20")
+              a(href="/home" class="button button-default button-full-width h4 ttitle")= "Home"
     when 2
       div(class="cover error")
         .container
           .row
             .col-pp-100
-              h1 "Ticket <strong>#{tnum}</strong> already entered!"
-              p "Entered time:" <em>#{date}</em>
+              h1 !! Ticket <strong>#{tnum}</strong> already entered !!
+              p Entrance time: <em>#{date}</em>
           .row
-            .col-pp-100
-              a(href="/home" class="button button-outlined button-full-width btn-black h4 ttitle")= "Home"
+            div(class="col-pp-100 col-tl-60 offset-tl-20 offset-dt-20")
+              a(href="/home" class="button button-default button-full-width btn-black h4 ttitle")= "Home"
     default
       div(class="cover noop")
         .container
           .row
             .col-pp-100
-              h1 "Does <strong>#{tnum}</strong> look like a ticket number? :)"
+              h1 Does <strong>#{tnum}</strong> look like a ticket number? :)
           .row
-            .col-pp-100
-              a(href="/home" class="button button-outlined button-full-width btn-black h4 ttitle")= "Home"
+            div(class="col-pp-100 col-tl-60 offset-tl-20 offset-dt-20")
+              a(href="/home" class="button button-default button-full-width btn-black h4 ttitle")= "Home"
 

@@ -57,8 +57,9 @@ h2 {
   color: #fefefe;
 }
 .btn-black {
-  color: #202020 !important;
+  color: #fefefe !important;
   border-color: #202020 !important;
+  background-color: #202020 !important;
 }
 
 /* Details Page */
@@ -131,5 +132,61 @@ h2 {
 @media (min-width: 1024px) {
   .tickets-container div {
     width: 8.5%;
+  }
+}
+
+/* Admin Page */
+.springgreen {
+  color: #202020 !important;
+  background-color: springgreen;
+}
+.blueviolet {
+  background-color: blueviolet;
+}
+.msg {
+  position: relative;
+  width: 100vw;
+  color: #fafafa;
+  display: inline-block;
+}
+.msg p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  top: 0;
+  left: 0;
+  font-size: 1.2em;
+  font-weight: bold;
+  text-align: center;
+  text-transform: uppercase;
+}
+.msg button {
+  margin-left: 4em;
+  margin-bottom: 0;
+}
+.form-inline {
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+}
+.btn-half {
+  display: block;
+  width: 100%;
+}
+.close {
+  text-align: right;
+  top: 0.2em;
+  right: 1em;
+  position: absolute;
+
+}
+@media (min-width: 768px) {
+  .btn-half {
+    display: inline-block;
+    width: 49%;
+    margin-right: 0;
+    margin-left: 0;
+  }
+  .btn-half:last-child {
+    margin-left: 2% !important;
   }
 }
