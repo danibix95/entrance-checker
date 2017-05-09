@@ -73,23 +73,32 @@ app.post("/login", server.login);
 app.get("/logout", server.logout);
 // serve private default page
 app.get("/home", server.requireLogin, server.home);
-//
+
 // set everything under /home/ path
 // to be protected by unauthorized user
 app.get("/home/*", server.requireLogin);
 
 // check that only admin can sell new tickets
 app.use("/home/admin/*", server.checkAdmin);
-//
-// // list tickets status
+
+// list tickets status
 app.get("/home/tickets", server.getTickets);
-// // get specific ticket status
+// get specific ticket status
 app.get("/home/tickets/:ticket_num", server.ticketDetails);
-//
-// // set an user as entered to the event
+
+// set an user as entered to the event
 app.post("/home/tickets/entered", server.entered);
-// // add a ticket to dataset
-// // app.post("/home/admin/tickets/sell", server.checkAdmin, server.sellTicket);
+// used to confirm the entrance of attendee
+app.post("/home/tickets/entered/commit", server.entered2);
+
+// admin dashboard
+app.get("/home/admin/dashboard", server.dashboard);
+// add a ticket to dataset
+app.post("/home/admin/sell", server.sellTicket);
+// UI way to remove an entrance
+app.post("/home/admin/entered/undo", server.entranceUndo);
+// Get who sold specified ticket
+app.post("/home/admin/ticket/vendor", server.viewTicketVendor);
 /*===================*/
 
 /* MANAGE PUBLIC RESOURCE */

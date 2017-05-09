@@ -12,9 +12,6 @@ const crypto = require('crypto');
 const logger = require("./logger.js");
 
 /* =========== QUERIES ========= */
-// insertions
-const sellTicket = `INSERT INTO attendees VALUES ($1::text, $2::text, $3::text, $4::text, $5::text)`;
-
 // selections
 const getCredentials = `SELECT username, password FROM fdp_staff WHERE username = $1::text`;
 const getAttendees = `SELECT ticket_num, sold, entered FROM attendees ORDER BY ticket_num`;
@@ -23,8 +20,11 @@ const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold
 const checkEntered = `SELECT sold FROM attendees WHERE ticket_num = $1::integer AND entered IS NULL`;
 const checkEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL`;
 const getEntrance = `SELECT entered FROM attendees WHERE ticket_num = $1::integer`;
+const getVendor = `SELECT vendor FROM attendees WHERE ticket_num = $1::integer`;
 
-const updateStatus = `UPDATE attendees SET entered = NOW() WHERE ticket_num = $1::integer`
+const updateStatus = `UPDATE attendees SET entered = NOW() WHERE ticket_num = $1::integer`;
+const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::text, sold = true, vendor = 'entrance', entered = NOW() WHERE ticket_num = $1::integer`;
+const uncommitEntrance = `UPDATE attendees SET entered = NULL WHERE ticket_num = $1::integer`;
 /* ============================= */
 
 /* ========= UTILITIES ========= */
@@ -157,7 +157,7 @@ class DB {
   }
 
   /** Check if specified ticket, then in case of success update DB saving the date */
-  setEntered(ticket_num) {
+  setEntered1(ticket_num) {
     /*
        -1 => update error
         0 => OK
@@ -167,22 +167,17 @@ class DB {
     return makeSelection(this.pool, checkEntered, [ticket_num])
         .then((result) => {
           if (result.length === 1) {
-            if (result[0].sold === true) {
-              // OK, let attendee enter to party
-              return makeUpdate(this.pool, updateStatus, [ticket_num])
-                  .then((result) => result-1)
-                  .catch((error) => {
-                    logger.log("error", error);
-                  });
-            }
-            else {
-              // ticket unsold
-              return 1;
-            }
+            return (result[0].sold ? 0 : 1);
           }
           // attendee is already entered
           return 2;
         })
+        .catch((error) => { logger.log("error", error); });
+  }
+
+  setEntered2(ticket_num) {
+    return makeUpdate(this.pool, updateStatus, [ticket_num])
+        .then((result) => result === 1)
         .catch((error) => { logger.log("error", error); });
   }
 
@@ -201,6 +196,31 @@ class DB {
   details(tnum) {
     return makeSelection(this.pool, getAttendee, [tnum])
         .then((result) => result[0])
+        .catch((error) => { logger.log("error", error); });
+  }
+
+  sell(tnum, fname, lname) {
+    return makeUpdate(this.pool, sellTicket, [tnum, fname, lname])
+        .then((result) => result === 1)
+        .catch((error) => { logger.log("error", error); });
+  }
+
+  deleteEntrance(tnum) {
+    return makeUpdate(this.pool, uncommitEntrance, [tnum])
+        .then((result) => result === 1)
+        .catch((error) => { logger.log("error", error); });
+  }
+
+  checkVendor(tnum) {
+    return makeSelection(this.pool, getVendor, [tnum])
+        .then((result) => {
+          if (result.length === 1) {
+            return result[0].vendor;
+          }
+          else {
+            return undefined;
+          }
+        })
         .catch((error) => { logger.log("error", error); });
   }
 }

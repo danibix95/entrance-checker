@@ -16,8 +16,9 @@ class Control {
   isLoggedIn(request, response, next) {
     // if a user has already logged in,
     // then bring it directly to dashboard
+    console.log(request.session.user);
     if (request.session.user) {
-      response.redirect(request.url || "/home");
+      response.redirect("/home");
     }
     // otherwise go to login page
     else {
@@ -45,7 +46,12 @@ class Control {
     }
     // otherwise go to the requested page
     else {
-      next();
+      if (request.session.user === "adm") {
+        next();
+      }
+      else {
+        response.redirect('/home');
+      }
     }
   }
 
@@ -141,18 +147,21 @@ class Control {
 
     try {
       // check if is number and stop exectuion
-      if (tmpNum === "" || tmpNum === "undefined") throw new Error("Ticket number not inserted!");
+      if (!tmpNum) throw new Error("Ticket number not inserted!");
       // check ticket number is really a number
       let tnum = parseInt(tmpNum);
 
-      if (tnum < 1 || tnum > 950) throw new Error("Ticket number not valid!")
+      if (isNaN(tnum)) throw new Error("Ticket inserted value is not valid!");
 
-      model.setEntered(tnum)
+      if (tnum < 1 || tnum > 1050) throw new Error("Ticket number out of bound!");
+
+      model.setEntered1(tnum)
           .then((result) => {
             switch (result) {
               case 0:
                 model.details(tnum)
                     .then((attendee) => {
+                      logger.info(`Ticket ${attendee.ticket_num} entered at ${new Date()}`)
                       response.render(
                           "checkTicket",
                           {
@@ -180,11 +189,43 @@ class Control {
                 response.render("checkTicket", { tnum : tmpNum});
             }
           })
-          .catch(logger.error("Something wrong with entrance!"));
+          .catch(logger.warn("Something wrong with entrance!"));
     }
     catch (e) {
       logger.warn(`Wrong or undefined ticket number: ${e}`);
-      response.render("checkTicket", { tnum : (tmpNum === "" ? null : tmpNum)})
+      response.render("checkTicket", { tnum : (tmpNum === "" ? "null" : tmpNum)})
+    }
+  }
+
+  entered2(request, response) {
+    response.location("/home");
+    if (request.body.tnum) {
+      try {
+        let tnum = parseInt(request.body.tnum);
+
+        if (isNaN(tnum)) throw new Error("Ticket inserted value is not valid!");
+
+        if (tnum < 1 || tnum > 1050) throw new Error("Ticket number out of bound!");
+
+        model.setEntered2(tnum)
+            .then(result => {
+              if (result) {
+                response.render("home", { msg : "Ticket committed successfully!"})
+              }
+              else {
+                logger.log("error", `Error committing ticket ${tnum}`);
+                response.render("home", { msg : "Error committing ticket!"});
+              }
+            })
+            .catch((error) => {
+              logger.warn("Something wrong with entrance!")
+              response.render("home", { msg : "Error committing ticket!"});
+            });
+      }
+      catch (e) {
+        logger.warn(`Wrong or undefined ticket number: ${e}`);
+        response.render("home", { msg : "Error committing ticket!"});
+      }
     }
   }
 
@@ -203,15 +244,124 @@ class Control {
     try {
       let tnum = parseInt(tmpNum);
 
+      if (isNaN(tnum)) throw new Error("Ticket inserted value is not valid!");
+
       model.details(tnum)
           .then((attendee) => {
             response.render("details", attendee);
           })
-          .catch(logger.error(`Something wrong getting ${tnum} ticket details!`));
+          .catch(logger.error(`Something went wrong getting ticket ${tnum} details!`));
     }
     catch (e) {
       logger.warn(`Wrong ticket number (${tmpNum}): ${e}`);
       response.render("home", {})
+    }
+  }
+
+  dashboard(request, response) {
+    response.render("dashboard", {});
+  }
+
+  sellTicket(request, response) {
+    if (request.body.tck_num) {
+      try {
+        let tnum = parseInt(request.body.tck_num);
+        if (isNaN(tnum)) throw new Error("Ticket inserted value is not valid!");
+
+        if (request.body.fname && request.body.lname) {
+          model.sell(tnum, request.body.fname, request.body.lname)
+              .then((status) => {
+                response.location("/home/admin/dashboard");
+                response.render(
+                    "dashboard",
+                    {
+                      msg: (status ? "Ticket Sold" : "Update error!"),
+                      status: status
+                    }
+                );
+              })
+              .catch(logger.error(`Something went wrong updating ticket ${tnum} details!`));
+        }
+        else {
+          logger.warn("No ticket data provided!");
+          response.location("/home/admin/dashboard");
+          response.render("dashboard", { msg: "No ticket data provided!" });
+        }
+      }
+      catch (e) {
+        logger.warn(`Wrong ticket number (${tmpNum}): ${e}`);
+        response.location("/home/admin/dashboard");
+        response.render("checkTicket", { tnum : tmpNum});
+      }
+    }
+    else {
+      logger.warn("No ticket number provided for selling!");
+      response.location("/home/admin/dashboard");
+      response.render("dashboard", { msg: "No ticket number provided for selling!"});
+    }
+  }
+
+  entranceUndo(request, response) {
+    if (request.body.tck_num) {
+      try {
+        let tnum = parseInt(request.body.tck_num);
+        if (isNaN(tnum)) throw new Error("Ticket inserted value is not valid!");
+
+        model.deleteEntrance(tnum)
+              .then((status) => {
+                response.location("/home/admin/dashboard");
+                response.render(
+                    "dashboard",
+                    {
+                      msg: (status ? "Entrance Updated" : "Update error!"),
+                      status: status
+                    }
+                );
+              })
+              .catch(logger.error(`Something went wrong updating entrance ${tnum} details!`));
+      }
+      catch (e) {
+        logger.warn(`Wrong ticket number (${tmpNum}): ${e}`);
+        response.location("/home/admin/dashboard");
+        response.render("checkTicket", { tnum : tmpNum});
+      }
+    }
+    else {
+      logger.warn("No ticket number provided for selling!");
+      response.location("/home/admin/dashboard");
+      response.render("dashboard", { msg: "No ticket number provided for selling!"});
+    }
+  }
+
+  viewTicketVendor(request, response) {
+    if (request.body.tck_num) {
+      try {
+        let tnum = parseInt(request.body.tck_num);
+        if (isNaN(tnum)) throw new Error("Ticket inserted value is not valid!");
+
+        model.checkVendor(tnum)
+              .then((vendor) => {
+                response.location("/home/admin/dashboard");
+                response.render(
+                    "dashboard",
+                    {
+                      msg: (vendor ? vendor : "No vendor!"),
+                      status: vendor
+                    }
+                );
+              })
+              .catch(logger.error(`Something went wrong updating entrance ${tnum} details!`));
+      }
+      catch (e) {
+        logger.warn(`Wrong ticket number (${tmpNum}): ${e}`);
+        response.location("/home/admin/dashboard");
+        response.render("checkTicket", { tnum : tmpNum});
+      }
+    }
+    else {
+      logger.warn("No ticket number provided for selling!");
+      response.location("/home/admin/dashboard");
+      response.render("dashboard", { msg: "No ticket number provided for selling!"});
     }
   }
 }
