@@ -23,7 +23,7 @@ const getEntrance = `SELECT entered FROM attendees WHERE ticket_num = $1::intege
 const getVendor = `SELECT vendor FROM attendees WHERE ticket_num = $1::integer`;
 
 const updateStatus = `UPDATE attendees SET entered = NOW() WHERE ticket_num = $1::integer`;
-const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::text, sold = true, vendor = 'entrance', entered = NOW() WHERE ticket_num = $1::integer`;
+const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::text, sold = true, resp_vendor = 'entrance', entered = NOW() WHERE ticket_num = $1::integer`;
 const uncommitEntrance = `UPDATE attendees SET entered = NULL WHERE ticket_num = $1::integer`;
 /* ============================= */
 

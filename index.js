@@ -55,7 +55,7 @@ app.use(session({
     sameSite : true,
     // need a certificate to only go over https
     secure: false,
-    maxAge: 10800000,
+    maxAge: 28800000,
   },
   // set session cookie name
   name: "nsession"
