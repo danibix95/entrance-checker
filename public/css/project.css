@@ -13,7 +13,7 @@ h2 {
 
 .b-logo {
   display: block;
-  margin: 0 auto;
+  margin: 10px auto 0;
   width: 30%;
 }
 
@@ -136,6 +136,9 @@ h2 {
 }
 
 /* Admin Page */
+.no-right-margin {
+	margin-right: 0;
+}
 .springgreen {
   color: #202020 !important;
   background-color: springgreen;

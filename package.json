@@ -1,6 +1,6 @@
 {
   "name": "fdp-tickets",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Tickets manager for Festa di Privamera event",
   "main": "index.js",
   "scripts": {
@@ -21,16 +21,17 @@
   },
   "homepage": "https://github.com/danibix95/FdP_tickets#readme",
   "dependencies": {
-    "body-parser": "^1.17.1",
-    "compression": "^1.6.2",
-    "express": "^4.15.2",
-    "express-minify": "^0.2.0",
-    "express-session": "^1.15.2",
+    "body-parser": "^1.18.2",
+    "compression": "^1.7.2",
+    "express": "^4.16.3",
+    "express-minify": "^1.0.0",
+    "express-session": "^1.15.6",
     "path": "^0.12.7",
-    "pg": "^6.1.5",
-    "pg-pool": "^1.7.1",
-    "pug": "^2.0.0-beta11",
+    "pavilion": "^2.0.3",
+    "pg": "^7.4.1",
+    "pg-pool": "^2.0.3",
+    "pug": "^2.0.3",
     "url": "^0.11.0",
-    "winston": "^2.3.1"
+    "winston": "^2.4.1"
   }
 }

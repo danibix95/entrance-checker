@@ -1,7 +1,7 @@
 /*
  * Daniele Bissoli
  * FdP Tickets Manager - Logger module
- * v0.0.1 - 2017-04-16
+ * v0.0.2 - 2017-04-16
  */
 
 // library for logging

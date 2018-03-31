@@ -1,7 +1,7 @@
 /*
  * Daniele Bissoli
  * FdP Tickets Manager - Database management
- * v0.0.1 - 2017-04-16
+ * v0.0.2 - 2018-03-31
  */
 
 const pg = require("pg");
@@ -19,6 +19,7 @@ const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold
 //const checkEntered = `SELECT entered FROM attendees WHERE ticket_num = $1::integer AND entered IS NULL`;
 const checkEntered = `SELECT sold FROM attendees WHERE ticket_num = $1::integer AND entered IS NULL`;
 const checkEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL`;
+const checkSoldNum = `SELECT COUNT(*) FROM attendees WHERE sold = TRUE`;
 const getEntrance = `SELECT entered FROM attendees WHERE ticket_num = $1::integer`;
 const getVendor = `SELECT vendor FROM attendees WHERE ticket_num = $1::integer`;
 
@@ -92,6 +93,10 @@ function makeUpdate(pool, query, params) {
 
 class DB {
   constructor() {
+	// !! REMEMBER !! Here you need to check that env variable was set before run!
+	if (process.env.DATABASE_URL === undefined) {
+		console.log("\nYou'd not set DATABASE_URL variable. Check instructions before (see data folder)!\n");
+	}
     const pgParams = url.parse(process.env.DATABASE_URL);
     const pgAuth = pgParams.auth.split(":");
 
@@ -193,6 +198,12 @@ class DB {
         .catch((error) => { logger.log("error", error); });
   }
 
+  currentSold() {
+    return makeSelection(this.pool, checkSoldNum, [])
+        .then((result) => result[0].count)
+        .catch((error) => { logger.log("error", error); });
+  }
+
   details(tnum) {
     return makeSelection(this.pool, getAttendee, [tnum])
         .then((result) => result[0])
@@ -200,8 +211,22 @@ class DB {
   }
 
   sell(tnum, fname, lname) {
-    return makeUpdate(this.pool, sellTicket, [tnum, fname, lname])
-        .then((result) => result === 1)
+	return makeSelection(this.pool, getAttendee, [tnum])
+        .then((result) => result[0])
+        .then((t) => {
+            // if it was already sold, then I can't sell it again
+            if (t.sold) {
+                return 2;
+            }
+            else {
+                return makeUpdate(this.pool, sellTicket, [tnum, fname, lname]);
+            }
+        })
+        .then((result) => {
+            if (result === 1) return 1; /* ticket sold */
+            if (result === 2) return 2; /* ticket already sold, so no update */
+            return 0;                   /* some error around */
+        })
         .catch((error) => { logger.log("error", error); });
   }
 

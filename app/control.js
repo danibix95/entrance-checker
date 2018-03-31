@@ -1,7 +1,7 @@
 /*
  * Daniele Bissoli
  * FdP Tickets Manager - Server side logic
- * v0.0.1 - 2017-04-16
+ * v0.0.2 - 2017-04-16
  */
 
 // internal libraries
@@ -16,7 +16,6 @@ class Control {
   isLoggedIn(request, response, next) {
     // if a user has already logged in,
     // then bring it directly to dashboard
-    console.log(request.session.user);
     if (request.session.user) {
       response.redirect("/home");
     }
@@ -271,11 +270,25 @@ class Control {
         if (request.body.fname && request.body.lname) {
           model.sell(tnum, request.body.fname, request.body.lname)
               .then((status) => {
+				// define which message display
+				let info = ""
+				if (status == 1) {
+					info = "Ticket Sold";
+				}
+				else {
+					if (status == 2) {
+						info = "Ticket not sold, since it has already sold!";
+					}
+					else {
+						info = "Update error!";
+					}
+				}
+				// notify the admin
                 response.location("/home/admin/dashboard");
                 response.render(
                     "dashboard",
                     {
-                      msg: (status ? "Ticket Sold" : "Update error!"),
+                      msg: info,
                       status: status
                     }
                 );
@@ -332,6 +345,15 @@ class Control {
       response.render("dashboard", { msg: "No ticket number provided for selling!"});
     }
   }
+
+  getTicketsInfo(request, response) {
+    Promise.all([model.currentInside(), model.currentSold()])
+        .then(result => {
+          // get tickets info
+          response.render("dashboard", { msg: `Entered: ${result[0]} - Sold ${result[1]}`, status: 1 });
+        })
+        .catch((error) => { logger.log("error", error); });
+  }	
 
   viewTicketVendor(request, response) {
     if (request.body.tck_num) {

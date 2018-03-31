@@ -1,7 +1,7 @@
 /*
  * Daniele Bissoli
  * FdP Tickets Manager
- * v0.0.1 - 2017-04-16
+ * v0.0.2 - 2017-04-16
  */
 
 "use strict";
@@ -83,6 +83,8 @@ app.use("/home/admin/*", server.checkAdmin);
 
 // list tickets status
 app.get("/home/tickets", server.getTickets);
+// get a notification with tickets info (entered vs sold)
+app.get("/home/tickets-info", server.getTicketsInfo);
 // get specific ticket status
 app.get("/home/tickets/:ticket_num", server.ticketDetails);
 
@@ -110,5 +112,5 @@ app.use('/lib/pavilion', express.static(path.join(__dirname, 'node_modules/pavil
 /* APPLICATION STARTUP */
 app.listen(process.env.PORT || app.get("port"), function () {
   // debug info => initial message with listening port
-  console.log("Website listening on port " + app.get("port"));
+  logger.info("Website listening on port " + app.get("port"));
 });
