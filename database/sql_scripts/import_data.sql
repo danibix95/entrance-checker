@@ -1,5 +1,6 @@
 \c fdp_tickets;
 
+DROP SCHEMA IF EXISTS tickets cascade;
 CREATE SCHEMA IF NOT EXISTS tickets AUTHORIZATION fdp;
 ALTER DATABASE fdp_tickets SET search_path TO tickets, public;
 
@@ -21,7 +22,7 @@ CREATE TABLE tickets.fdp_staff (
 );
 
 -- \copy rely on current directory
-\copy tickets.attendees FROM 'attendees.csv' WITH (FORMAT CSV, NULL 'null');
-\copy tickets.fdp_staff FROM 'fdp_staff.csv' WITH (FORMAT CSV);
+\copy tickets.attendees FROM '../csv/attendees.csv' WITH (FORMAT CSV, NULL 'null');
+\copy tickets.fdp_staff FROM '../csv/fdp_staff.csv' WITH (FORMAT CSV);
 
 \c fdp_tickets;

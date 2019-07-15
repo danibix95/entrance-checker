@@ -18,12 +18,12 @@ The first time that the container it is run, the application database exits, but
 
 To run the script, first change the working directory to `sql_scripts` and then launch the `psql` command (using the password contained in `postgres-passwd` file) and from it run the import script.
 
-    psql -U postgres -h localhost -d postgres
+    psql -U fdp -h localhost -d postgres
 
-In case it is necessary to reinitialize the database, the script `reinit_db.sql` contains the instruction to carry out the task. **Note**: run this script when connected to a database different from the one of the application (e.g. postgres).
+The import script reinitialize the tables of the `fdp_tickets` database and import expected data into corresponding tables. In case it is necessary to reload the data, it is sufficient to execute again the import script.
 
 ### Manage the database
 
-In a similar manner, to view the data contained in the application database it is necessary to run `psql` front-end with the user `fdp`.
+In a similar manner, to view the data contained in the application database it is necessary to run `psql` front-end connecting it directly to `fdp_tickets` database.
 
     psql -U fdp -h localhost -d fdp_tickets
