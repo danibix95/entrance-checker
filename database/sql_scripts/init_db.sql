@@ -9,5 +9,5 @@ CREATE DATABASE fdp_tickets
          LC_CTYPE   = 'it_IT.UTF-8'
          CONNECTION LIMIT = -1;
 
--- restore permissions for fdp user on this database
+-- assign permissions for fdp user on this database
 GRANT ALL PRIVILEGES ON DATABASE fdp_tickets TO fdp;
