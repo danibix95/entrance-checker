@@ -60,9 +60,9 @@ func (appc *AppController) WhenEntered(ctx iris.Context) {
 	ticketNum, err := ctx.Params().GetUint("ticketNum")
 	if err != nil {
 		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
-			" Ticket numbers should be natural numbers.", ticketNum))
+			" Ticket numbers should be a natural number.", ticketNum))
 	}
-	enteredTime := appc.dbc.WhenEntered(uint(ticketNum))
+	enteredTime := appc.dbc.WhenEntered(ticketNum)
 
 	_, _ = ctx.JSON(iris.Map{
 		"ticketNum": ticketNum,
@@ -82,6 +82,48 @@ func (appc *AppController) GetTicketDetails(ctx iris.Context) {
 }
 
 func (appc *AppController) SetEntered(ctx iris.Context) {
+	var ticket struct {
+		TicketNum uint `json:"ticketNum"`
+	}
+	err := ctx.ReadJSON(&ticket)
+	if err != nil {
+		appc.logger.Panicln(fmt.Sprintf("Error reading JSON!\n%v", err))
+	}
+
+	// check ticket is in range
+	if ticket.TicketNum > dbconn.TICKETHIGH {
+		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
+			" Ticket number is not in specified range.", ticket.TicketNum))
+	}
+
+	// Default result -> the ticket has not been sold
+	// and therefore it cannot enter without first pay the entrance
+	result := iris.Map{
+		"ticketNum": ticket.TicketNum,
+		"status":    400,
+		"entered":   false,
+		"msg":       "Ticket unsold!",
+	}
+
+	switch appc.dbc.IsSoldEntered(ticket.TicketNum) {
+	case dbconn.SOLDENTERED:
+		// notify that the ticket is already entered,
+		// so the same ticket number cannot enter again
+		result["entered"] = true
+		result["msg"] = "Ticket sold and already entered."
+	case dbconn.SOLD:
+		if appc.dbc.SetEntered(ticket.TicketNum) {
+			// successful update
+			result["status"] = 200
+			result["entered"] = true
+			result["msg"] = "Ticket entered correctly!"
+		} else {
+			result["status"] = 500
+			result["msg"] = "Error encountered while allowing the entrance to this ticket..."
+		}
+	}
+
+	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) ConfirmEntrance(ctx iris.Context) {

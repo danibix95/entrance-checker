@@ -18,7 +18,7 @@ const getCredentials = `SELECT username, password FROM fdp_staff WHERE username 
 const getAttendees = `SELECT ticket_num, sold, entered FROM attendees ORDER BY ticket_num`
 const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold, entered FROM attendees WHERE ticket_num = $1::integer`
 
-const checkEntered = `SELECT sold FROM attendees WHERE ticket_num = $1::integer AND entered IS NULL`
+const isSoldEntered = `SELECT sold, entered FROM attendees WHERE ticket_num = $1::integer`
 const checkEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL`
 const checkSoldNum = `SELECT COUNT(*) FROM attendees WHERE sold = TRUE`
 const getEntrance = `SELECT entered FROM attendees WHERE ticket_num = $1::integer`
@@ -30,6 +30,15 @@ const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::
 const rollbackEntrance = `UPDATE attendees SET entered = NULL WHERE ticket_num = $1::integer`
 
 var statements map[string]*sql.Stmt
+
+/* ======= TYPES DEFINITION ====== */
+type EnteredStatus uint8
+
+const (
+	SOLDENTERED EnteredStatus = iota + 1
+	SOLD
+	UNSOLD
+)
 
 type DBController struct {
 	db     *sql.DB
@@ -86,7 +95,7 @@ func (dbc *DBController) prepareQueries() {
 	stmtMap["getCredential"], _ = dbc.db.Prepare(getCredentials)
 	stmtMap["getAttendees"], _ = dbc.db.Prepare(getAttendees)
 	stmtMap["getAttendee"], _ = dbc.db.Prepare(getAttendee)
-	stmtMap["checkEntered"], _ = dbc.db.Prepare(checkEntered)
+	stmtMap["isSoldEntered"], _ = dbc.db.Prepare(isSoldEntered)
 	stmtMap["checkEnteredNum"], _ = dbc.db.Prepare(checkEnteredNum)
 	stmtMap["checkSoldNum"], _ = dbc.db.Prepare(checkSoldNum)
 	stmtMap["getEntrance"], _ = dbc.db.Prepare(getEntrance)
@@ -115,12 +124,67 @@ func getHash(message string) string {
 func (dbc *DBController) WhenEntered(ticketNum uint) pq.NullTime {
 	attendee := Attendee{TicketNum: ticketNum}
 
-	err := statements["getEntrance"].QueryRow(attendee.TicketNum).Scan(&attendee.Entered)
+	err := statements["getEntrance"].QueryRow(attendee.TicketNum).
+		Scan(&attendee.Entered)
 	if err != nil {
 		dbc.logger.Panicln(fmt.Sprintf(
-			"Impossible to retrieven when ticket %v has entered!",
+			"Impossible to retrieve when ticket %v has entered!",
 			attendee.TicketNum))
 	}
 
 	return attendee.Entered
+}
+
+// Check among the attendees that has not entered,
+// whether selected tickets has already been sold
+func (dbc *DBController) IsSoldEntered(ticketNum uint) EnteredStatus {
+	attendee := Attendee{TicketNum: ticketNum}
+
+	err := statements["isSoldEntered"].QueryRow(attendee.TicketNum).
+		Scan(&attendee.Sold, &attendee.Entered)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			dbc.logger.Println(err)
+			dbc.logger.Panicln(fmt.Sprintf(
+				"Ticket %v does not exist (not in the valid range)!",
+				attendee.TicketNum))
+		} else {
+			dbc.logger.Panicln(fmt.Sprintf(
+				"Impossible to check whether ticket %v has been sold!\n%v",
+				attendee.TicketNum, err))
+		}
+	}
+
+	status := SOLDENTERED
+	if !attendee.Sold {
+		status = UNSOLD
+	} else {
+		if !attendee.Entered.Valid {
+			status = SOLD
+		}
+	}
+
+	return status
+}
+
+func (dbc *DBController) SetEntered(ticketNum uint) bool {
+	result := true
+	attendee := Attendee{TicketNum: ticketNum}
+
+	res, err := statements["updateStatus"].Exec(attendee.TicketNum)
+	if err != nil {
+		result = false
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Impossible to set as entered ticket %v!",
+			attendee.TicketNum))
+	}
+	count, err := res.RowsAffected()
+	if err != nil || count != 1 {
+		result = false
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Something went wrong updating entrance of ticket %v! (changed %v rows)",
+			attendee.TicketNum, count))
+	}
+
+	return result
 }
