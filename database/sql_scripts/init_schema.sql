@@ -19,7 +19,7 @@ CREATE TABLE tickets.attendees (
 CREATE TABLE tickets.fdp_staff (
     username VARCHAR,
     password VARCHAR,
-    canSell BOOLEAN
+    admin BOOLEAN
 );
 
 -- assign the ownership of above table to correct user

@@ -1,27 +1,83 @@
 package main
 
 import (
-	"fmt"
 	"github.com/danibix95/FdP_tickets/server/internal/controller"
-	"github.com/danibix95/FdP_tickets/server/internal/dbconn"
 	"github.com/kataras/iris"
-	"time"
+	"log"
+	"os"
+	"path/filepath"
 )
 
+const logDir string = "logs"
+
 func main() {
-	controller.Greet()
-	dbc := dbconn.New("logs")
+	// to avoid potential errors, create the logs directory if it does not exists
+	if _, err := os.Stat("logs"); err != nil {
+		if os.IsNotExist(err) {
+			dirErr := os.Mkdir("logs", os.ModeDir)
+			if dirErr != nil {
+				panic("Impossible to find or create logs folder!")
+			}
+		}
+	}
 
+	// log files
+	controlLogFile, err := os.OpenFile(filepath.Join(logDir, "control.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("Error opening log file: %v", err)
+	}
+	defer controlLogFile.Close()
+
+	dbLogFile, err := os.OpenFile(filepath.Join(logDir, "db_conn.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("Error opening log file: %v", err)
+	}
+	defer dbLogFile.Close()
+
+	// Before starting the application,
+	// obtain a controller for it, which connects to the database
+	control := controller.New(controlLogFile, dbLogFile)
+
+	// APP DEFINITION
 	app := iris.Default()
-	app.Get("/ping", func(ctx iris.Context) {
 
-		dbc.PingDB() // test db connection
+	privateRoutes := app.Party("/", control.RequireLogin)
+	{
+		privateRoutes.Get("/ping", control.Ping)
+		privateRoutes.Get("/when-entered/{ticketNum:uint max(1050)}", control.WhenEntered)
 
-		_, _ = ctx.JSON(iris.Map{
-			"message": fmt.Sprintf("Pong - %v", time.Now().Local()),
-		})
-	})
+		// list tickets status
+		privateRoutes.Get("/tickets", control.GetTickets)
+		// get a notification with tickets info (entered vs sold)
+		privateRoutes.Get("/tickets-info", control.GetTicketsInfo)
+		// get specific ticket status
+		privateRoutes.Get("/tickets/{ticketNum:uint max(1050)}", control.GetTicketDetails)
+
+		// set an user as entered to the event
+		privateRoutes.Post("/tickets/entered", control.SetEntered)
+		// used to confirm the entrance of attendee
+		privateRoutes.Post("/tickets/entered/commit", control.ConfirmEntrance)
+
+		/* ======= ADMIN AREA =======*/
+		adminRoutes := privateRoutes.Party("/admin", control.IsAdmin)
+		{
+			// add a ticket to dataset
+			adminRoutes.Post("/sell", control.SellTicket)
+			// UI way to remove an entrance
+			adminRoutes.Post("/entered/undo", control.RollbackEntrance)
+			// Get who sold specified ticket
+			adminRoutes.Post("/ticket/vendor", control.GetTicketVendor)
+		}
+	}
+
+	// Register custom handler for specific http errors.
+	app.OnErrorCode(iris.StatusUnauthorized, control.Unauthorized)
+	app.OnErrorCode(iris.StatusNotFound, control.NotFound)
 
 	// with _ = it is possible to ignore the value returned by the method
-	_ = app.Run(iris.Addr(":8080"))
+	_ = app.Run(iris.Addr(":8080"),
+		iris.WithoutServerError(iris.ErrServerClosed),
+		iris.WithCharset("UTF-8"))
 }

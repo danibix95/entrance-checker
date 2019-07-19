@@ -1,15 +1,16 @@
 package dbconn
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"github.com/joho/godotenv"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	"io"
 	"log"
 	"os"
-	"path/filepath"
-	_ "path/filepath"
 )
 
 /* =========== QUERIES ========= */
@@ -28,42 +29,22 @@ const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::
 	`sold = true, resp_vendor = 'entrance', entered = NOW() WHERE ticket_num = $1::integer`
 const rollbackEntrance = `UPDATE attendees SET entered = NULL WHERE ticket_num = $1::integer`
 
+var statements map[string]*sql.Stmt
+
 type DBController struct {
-	db         *sql.DB
-	statements *map[string]*sql.Stmt
-	logger     *log.Logger
+	db     *sql.DB
+	logger *log.Logger
 }
 
-func New(logDir string) *DBController {
+func New(logFile *os.File) *DBController {
 	var dbc DBController
 
-	dbc.startLogger(logDir)
+	dbc.logger = log.New(io.MultiWriter(os.Stderr, logFile),
+		"", log.LstdFlags)
 	dbc.connect()
 	dbc.prepareQueries()
 
 	return &dbc
-}
-
-// Define a custom logger to store info also in a log file
-func (dbc *DBController) startLogger(logDir string) {
-	// to avoid potential errors, create the logs directory if it does not exists
-	if _, err := os.Stat(logDir); err != nil {
-		if os.IsNotExist(err) {
-			dirErr := os.Mkdir(logDir, os.ModeDir)
-			if dirErr != nil {
-				panic("Impossible to find or create logs folder!")
-			}
-		}
-	}
-
-	// select the file on which the logger will store the information
-	logFile, err := os.OpenFile(filepath.Join(logDir, "db_conn.log"),
-		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		log.Fatalf("Error opening log file: %v", err)
-	}
-
-	dbc.logger = log.New(io.MultiWriter(os.Stderr, logFile), "", log.LstdFlags)
 }
 
 // Initialize the database controller
@@ -114,12 +95,32 @@ func (dbc *DBController) prepareQueries() {
 	stmtMap["sellTicket"], _ = dbc.db.Prepare(sellTicket)
 	stmtMap["rollbackEntrance"], _ = dbc.db.Prepare(rollbackEntrance)
 
-	dbc.statements = &stmtMap
+	statements = stmtMap
 }
 
 func (dbc *DBController) CloseDB() {
 	err := dbc.db.Close()
 	if err != nil {
-		panic("An error occurred closing the database connection!")
+		dbc.logger.Panicln("An error occurred closing the database connection!")
 	}
+}
+
+/* ============= DATABASE ACCESSES ============= */
+func getHash(message string) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(message))
+	return base64.StdEncoding.EncodeToString([]byte(hash.Sum(nil)))
+}
+
+func (dbc *DBController) WhenEntered(ticketNum uint) pq.NullTime {
+	attendee := Attendee{TicketNum: ticketNum}
+
+	err := statements["getEntrance"].QueryRow(attendee.TicketNum).Scan(&attendee.Entered)
+	if err != nil {
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Impossible to retrieven when ticket %v has entered!",
+			attendee.TicketNum))
+	}
+
+	return attendee.Entered
 }

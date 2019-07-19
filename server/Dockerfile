@@ -3,8 +3,7 @@ FROM golang:alpine as builder
 
 # install required packages to retrieve
 # the dependencies and compile the source code
-RUN apk add --no-cache git
-RUN apk add --no-cache build-base
+RUN apk add --no-cache git build-base
 
 # enable the use of Go modules
 ENV GO111MODULE on
