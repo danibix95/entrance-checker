@@ -1,7 +1,6 @@
 # database and private files
 database/docker
-database/csv
-.csv
+*.real.csv
 
 # here is contained the password for database user
 database/postgres-passwd

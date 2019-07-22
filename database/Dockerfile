@@ -1,10 +1,28 @@
-FROM postgres:11.4-alpine
+# stage 1: generate fake data to be used during development and for testing purpose
+FROM python:3.7.4-slim as data_generator
+
+# install timezone package
+RUN apt-get install -y tzdata
+RUN cp /usr/share/zoneinfo/Europe/Rome /etc/localtime && echo "Europe/Rome" > /etc/timezone && date
+
+RUN pip install --trusted-host pypi.python.org numpy pandas
+
+WORKDIR /data
+COPY csv/get_fake_attendees.py .
+RUN python get_fake_attendees.py
+
+# stage 2: create the database image, importing generated data
+FROM postgres:11.4-alpine as database_image
 
 WORKDIR /sql_scripts
 
 COPY postgres-passwd /run/secrets/postgres-passwd
-COPY sql_scripts/init_db.sql /sql_scripts/init_db.sql
-COPY sql_scripts/init_schema.sql /sql_scripts/init_schema.sql
+COPY sql_scripts/ .
+
+RUN mkdir /csv
+# Note: staff only for development
+COPY csv/fdp_staff.csv /csv
+COPY --from=data_generator /data/attendees.csv /csv
 
 ENV LANG it_IT.UTF-8
 ENV LANGUAGE it_IT.UTF-8
@@ -17,5 +35,6 @@ ENV POSTGRES_PASSWORD_FILE /run/secrets/postgres-passwd
 RUN echo "CREATE USER fdp WITH PASSWORD '$(cat /run/secrets/postgres-passwd)';" > /docker-entrypoint-initdb.d/fdp_user.sql
 RUN cp /sql_scripts/init_db.sql /docker-entrypoint-initdb.d/init_db.sql
 RUN cp /sql_scripts/init_schema.sql /docker-entrypoint-initdb.d/init_schema.sql
+RUN cp /sql_scripts/import_data.sql /docker-entrypoint-initdb.d/insert_data.sql
 
 USER postgres
