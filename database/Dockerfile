@@ -1,5 +1,5 @@
 # stage 1: generate fake data to be used during development and for testing purpose
-FROM python:3.7.4-slim as data_generator
+FROM python:slim as data_generator
 
 # install timezone package
 RUN apt-get install -y tzdata
@@ -12,7 +12,7 @@ COPY csv/get_fake_attendees.py .
 RUN python get_fake_attendees.py
 
 # stage 2: create the database image, importing generated data
-FROM postgres:11.4-alpine as database_image
+FROM postgres:12.2-alpine as database_image
 
 WORKDIR /sql_scripts
 
