@@ -24,3 +24,6 @@
 
 # Log data
 logs
+
+# Scripts
+deploy_server.sh

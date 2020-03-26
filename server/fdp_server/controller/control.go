@@ -2,13 +2,18 @@ package controller
 
 import (
 	"fmt"
-	"github.com/danibix95/FdP_tickets/server/internal/dbconn"
+	"github.com/danibix95/fdp_server/dbconn"
 	"github.com/kataras/iris"
 	"io"
 	"log"
 	"os"
 	"time"
 )
+
+// data structure for POST requests
+type Ticket struct {
+	TicketNum uint `json:"ticketNum"`
+}
 
 type AppController struct {
 	dbc    *dbconn.DBController
@@ -36,6 +41,7 @@ func (appc *AppController) Ping(ctx iris.Context) {
 /* ======= LOGIN MANAGEMENT ======= */
 func (appc *AppController) RequireLogin(ctx iris.Context) {
 	appc.logger.Println("User interaction with app content!")
+	// TODO: implement login capabilities!
 	if false {
 		ctx.StatusCode(iris.StatusUnauthorized)
 		ctx.EndRequest()
@@ -55,6 +61,19 @@ func (appc *AppController) IsAdmin(ctx iris.Context) {
 }
 
 /* ======= TICKETS MANAGEMENT ======= */
+func (appc AppController) readPostTicket(ticket *Ticket, ctx *iris.Context) {
+	err := (*ctx).ReadJSON(ticket)
+	if err != nil {
+		appc.logger.Panicln(fmt.Sprintf("Error reading JSON!\n%v", err))
+	}
+
+	// check ticket is in range
+	if ticket.TicketNum > dbconn.TICKETHIGH {
+		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
+			" Ticket number is not in specified range.", ticket.TicketNum))
+	}
+}
+
 // Used to check whether and when an attendee entered to the party
 func (appc *AppController) WhenEntered(ctx iris.Context) {
 	ticketNum, err := ctx.Params().GetUint("ticketNum")
@@ -75,26 +94,43 @@ func (appc *AppController) WhenEntered(ctx iris.Context) {
 func (appc *AppController) GetTickets(ctx iris.Context) {
 }
 
-func (appc *AppController) GetTicketsInfo(ctx iris.Context) {
+func (appc *AppController) GetTicketsStats(ctx iris.Context) {
 }
 
 func (appc *AppController) GetTicketDetails(ctx iris.Context) {
+	ticketNum, err := ctx.Params().GetUint("ticketNum")
+	if err != nil || ticketNum > dbconn.TICKETHIGH {
+		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
+			" Ticket number is not in specified range.", ticketNum))
+	}
+
+	result := iris.Map{
+		"status":   400,
+		"attendee": nil,
+		"exists":   true,
+	}
+
+	attendee, err := appc.dbc.TicketDetails(ticketNum)
+	if err != nil {
+		if ticketNum > dbconn.TICKETHIGH {
+			result["exists"] = false
+			result["msg"] = fmt.Sprintf("Ticket do not exists."+
+				"%v is outside valid range [0-%v]", ticketNum, dbconn.TICKETHIGH)
+		} else {
+			result["msg"] = fmt.Sprintf("Ticket %v has not been sold."+
+				"Therefore no details are available", ticketNum)
+		}
+	} else {
+		result["status"] = 200
+		result["attendee"] = attendee
+	}
+
+	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) SetEntered(ctx iris.Context) {
-	var ticket struct {
-		TicketNum uint `json:"ticketNum"`
-	}
-	err := ctx.ReadJSON(&ticket)
-	if err != nil {
-		appc.logger.Panicln(fmt.Sprintf("Error reading JSON!\n%v", err))
-	}
-
-	// check ticket is in range
-	if ticket.TicketNum > dbconn.TICKETHIGH {
-		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
-			" Ticket number is not in specified range.", ticket.TicketNum))
-	}
+	var ticket Ticket
+	appc.readPostTicket(&ticket, &ctx)
 
 	// Default result -> the ticket has not been sold
 	// and therefore it cannot enter without first pay the entrance
@@ -126,13 +162,27 @@ func (appc *AppController) SetEntered(ctx iris.Context) {
 	_, _ = ctx.JSON(result)
 }
 
-func (appc *AppController) ConfirmEntrance(ctx iris.Context) {
-}
-
 func (appc *AppController) SellTicket(ctx iris.Context) {
 }
 
 func (appc *AppController) RollbackEntrance(ctx iris.Context) {
+	var ticket Ticket
+	appc.readPostTicket(&ticket, &ctx)
+
+	result := iris.Map{
+		"ticketNum": ticket.TicketNum,
+		"status":    500,
+		"rollback":  false,
+		"msg":       "Entrance rollback failed!",
+	}
+
+	if appc.dbc.RollbackEntrance(ticket.TicketNum) {
+		result["status"] = 200
+		result["rollback"] = true
+		result["msg"] = "Entrance rollback correctly executed!"
+	}
+
+	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) GetTicketVendor(ctx iris.Context) {
@@ -148,5 +198,10 @@ func (appc *AppController) Unauthorized(ctx iris.Context) {
 func (appc *AppController) NotFound(ctx iris.Context) {
 	_, _ = ctx.JSON(iris.Map{
 		"status": 404,
+	})
+}
+func (appc *AppController) InternalError(ctx iris.Context) {
+	_, _ = ctx.JSON(iris.Map{
+		"status": 500,
 	})
 }

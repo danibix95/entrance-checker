@@ -1,11 +1,14 @@
 package main
 
 import (
-	"github.com/danibix95/FdP_tickets/server/internal/controller"
+	"fmt"
+	"github.com/danibix95/fdp_server/controller"
+	"github.com/danibix95/fdp_server/dbconn"
 	"github.com/kataras/iris"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 const logDir string = "logs"
@@ -51,14 +54,17 @@ func main() {
 		// list tickets status
 		privateRoutes.Get("/tickets", control.GetTickets)
 		// get a notification with tickets info (entered vs sold)
-		privateRoutes.Get("/tickets-info", control.GetTicketsInfo)
+		privateRoutes.Get("/tickets-info", control.GetTicketsStats)
 		// get specific ticket status
-		privateRoutes.Get("/tickets/{ticketNum:uint max(1050)}", control.GetTicketDetails)
+		fmt.Println(strconv.FormatUint(uint64(dbconn.TICKETHIGH), 10))
+		privateRoutes.Get("/tickets/{ticketNum:uint max("+
+			strconv.FormatUint(uint64(dbconn.TICKETHIGH), 10)+")}",
+			control.GetTicketDetails)
 
 		// set an user as entered to the event
 		privateRoutes.Post("/tickets/entered", control.SetEntered)
 		// used to confirm the entrance of attendee
-		privateRoutes.Post("/tickets/entered/commit", control.ConfirmEntrance)
+		privateRoutes.Post("/tickets/entered/rollback", control.RollbackEntrance)
 
 		/* ======= ADMIN AREA =======*/
 		adminRoutes := privateRoutes.Party("/admin", control.IsAdmin)
@@ -75,6 +81,7 @@ func main() {
 	// Register custom handler for specific http errors.
 	app.OnErrorCode(iris.StatusUnauthorized, control.Unauthorized)
 	app.OnErrorCode(iris.StatusNotFound, control.NotFound)
+	app.OnErrorCode(iris.StatusInternalServerError, control.InternalError)
 
 	// with _ = it is possible to ignore the value returned by the method
 	_ = app.Run(iris.Addr(":8080"),

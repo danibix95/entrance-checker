@@ -16,7 +16,8 @@ import (
 /* =========== QUERIES ========= */
 const getCredentials = `SELECT username, password FROM fdp_staff WHERE username = $1::text`
 const getAttendees = `SELECT ticket_num, sold, entered FROM attendees ORDER BY ticket_num`
-const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold, entered FROM attendees WHERE ticket_num = $1::integer`
+const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold, entered
+						FROM attendees WHERE ticket_num = $1::integer`
 
 const isSoldEntered = `SELECT sold, entered FROM attendees WHERE ticket_num = $1::integer`
 const checkEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL`
@@ -167,6 +168,7 @@ func (dbc *DBController) IsSoldEntered(ticketNum uint) EnteredStatus {
 	return status
 }
 
+// Set specified ticket as entered (change entered value to current datetime)
 func (dbc *DBController) SetEntered(ticketNum uint) bool {
 	result := true
 	attendee := Attendee{TicketNum: ticketNum}
@@ -187,4 +189,73 @@ func (dbc *DBController) SetEntered(ticketNum uint) bool {
 	}
 
 	return result
+}
+
+// Revert the entrance of selected ticket
+func (dbc *DBController) RollbackEntrance(ticketNum uint) bool {
+	result := true
+	attendee := Attendee{TicketNum: ticketNum}
+
+	res, err := statements["rollbackEntrance"].Exec(attendee.TicketNum)
+	if err != nil {
+		result = false
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Impossible to set reset ticket %v entrance!",
+			attendee.TicketNum))
+	}
+	count, err := res.RowsAffected()
+	if err != nil || count != 1 {
+		result = false
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Something went wrong updating entrance of ticket %v! (changed %v rows)",
+			attendee.TicketNum, count))
+	}
+
+	return result
+}
+
+// Return the information of the specified ticket
+func (dbc DBController) TicketDetails(ticketNum uint) (*Attendee, error) {
+	var attendee = Attendee{TicketNum: ticketNum}
+
+	err := statements["getAttendee"].QueryRow(attendee.TicketNum).
+		Scan(&attendee.TicketNum, &attendee.FirstName, &attendee.LastName,
+			&attendee.TicketType, &attendee.Sold, &attendee.Entered)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			dbc.logger.Println(err)
+			dbc.logger.Panicln(fmt.Sprintf(
+				"Ticket %v does not exist (not in the valid range)!",
+				attendee.TicketNum))
+		}
+		// let upper level manage potential error
+		return nil, err
+	}
+
+	return &attendee, err
+}
+
+// Return the list of all the tickets
+func (dbc *DBController) TicketsList() ([]Attendee, error) {
+	var attendees []Attendee
+	rows, err := statements["getAttendees"].Query()
+
+	if err != nil {
+		dbc.logger.Panicln("Impossible to retrieve the list of tickets!")
+	}
+
+	for rows.Next() {
+		var attendee Attendee
+		err := rows.Scan(&attendee.TicketNum, &attendee.FirstName,
+			&attendee.LastName, &attendee.TicketType,
+			&attendee.Sold, &attendee.Entered)
+		if err != nil {
+			dbc.logger.Println(fmt.Sprintf("Impossible to read ticket %v"+
+				"and insert into the attendees list!", attendee.TicketNum))
+		} else {
+			attendees = append(attendees, attendee)
+		}
+	}
+
+	return attendees, err
 }
