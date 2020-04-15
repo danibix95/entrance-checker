@@ -92,6 +92,21 @@ func (appc *AppController) WhenEntered(ctx iris.Context) {
 }
 
 func (appc *AppController) GetTickets(ctx iris.Context) {
+	ticketList, err := appc.dbc.TicketsList()
+
+	result := iris.Map{
+		"status":    500,
+		"attendees": nil,
+	}
+
+	if err != nil {
+		result["msg"] = "An error occurred while retrieving the list of attendees!"
+	} else {
+		result["status"] = 200
+		result["attendees"] = ticketList
+	}
+
+	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) GetTicketsStats(ctx iris.Context) {
@@ -118,7 +133,7 @@ func (appc *AppController) GetTicketDetails(ctx iris.Context) {
 				"%v is outside valid range [0-%v]", ticketNum, dbconn.TICKETHIGH)
 		} else {
 			result["msg"] = fmt.Sprintf("Ticket %v has not been sold."+
-				"Therefore no details are available", ticketNum)
+				" Therefore no details are available", ticketNum)
 		}
 	} else {
 		result["status"] = 200
@@ -153,6 +168,8 @@ func (appc *AppController) SetEntered(ctx iris.Context) {
 			result["status"] = 200
 			result["entered"] = true
 			result["msg"] = "Ticket entered correctly!"
+
+			appc.logger.Println(fmt.Sprintf("Ticket %v entered", ticket.TicketNum))
 		} else {
 			result["status"] = 500
 			result["msg"] = "Error encountered while allowing the entrance to this ticket..."

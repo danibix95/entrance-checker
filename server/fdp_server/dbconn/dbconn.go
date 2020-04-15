@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/joho/godotenv"
 	"github.com/lib/pq"
@@ -15,9 +16,9 @@ import (
 
 /* =========== QUERIES ========= */
 const getCredentials = `SELECT username, password FROM fdp_staff WHERE username = $1::text`
-const getAttendees = `SELECT ticket_num, sold, entered FROM attendees ORDER BY ticket_num`
-const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold, entered
-						FROM attendees WHERE ticket_num = $1::integer`
+const getAttendees = `SELECT ticket_num, ticket_type, sold, entered FROM attendees ORDER BY ticket_num`
+const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold, vendor` +
+	`, resp_vendor, entered FROM attendees WHERE ticket_num = $1::integer`
 
 const isSoldEntered = `SELECT sold, entered FROM attendees WHERE ticket_num = $1::integer`
 const checkEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL`
@@ -215,16 +216,19 @@ func (dbc *DBController) RollbackEntrance(ticketNum uint) bool {
 }
 
 // Return the information of the specified ticket
-func (dbc DBController) TicketDetails(ticketNum uint) (*Attendee, error) {
+func (dbc *DBController) TicketDetails(ticketNum uint) (*Attendee, error) {
 	var attendee = Attendee{TicketNum: ticketNum}
 
 	err := statements["getAttendee"].QueryRow(attendee.TicketNum).
 		Scan(&attendee.TicketNum, &attendee.FirstName, &attendee.LastName,
-			&attendee.TicketType, &attendee.Sold, &attendee.Entered)
+			&attendee.TicketType, &attendee.Sold, &attendee.Vendor,
+			&attendee.RespVendor, &attendee.Entered)
+
 	if err != nil {
-		if err == sql.ErrNoRows {
-			dbc.logger.Println(err)
-			dbc.logger.Panicln(fmt.Sprintf(
+		if err != sql.ErrNoRows {
+			dbc.logger.Panicln(fmt.Sprintf("Database error: %v", err))
+		} else {
+			dbc.logger.Println(fmt.Sprintf(
 				"Ticket %v does not exist (not in the valid range)!",
 				attendee.TicketNum))
 		}
@@ -236,25 +240,31 @@ func (dbc DBController) TicketDetails(ticketNum uint) (*Attendee, error) {
 }
 
 // Return the list of all the tickets
-func (dbc *DBController) TicketsList() ([]Attendee, error) {
-	var attendees []Attendee
+func (dbc *DBController) TicketsList() ([]AttendeeSimple, error) {
+	var attendees []AttendeeSimple
 	rows, err := statements["getAttendees"].Query()
 
 	if err != nil {
 		dbc.logger.Panicln("Impossible to retrieve the list of tickets!")
 	}
+	defer rows.Close()
 
+	numErrors := 0
 	for rows.Next() {
-		var attendee Attendee
-		err := rows.Scan(&attendee.TicketNum, &attendee.FirstName,
-			&attendee.LastName, &attendee.TicketType,
+		var attendee AttendeeSimple
+		err = rows.Scan(&attendee.TicketNum, &attendee.TicketType,
 			&attendee.Sold, &attendee.Entered)
 		if err != nil {
+			numErrors++
 			dbc.logger.Println(fmt.Sprintf("Impossible to read ticket %v"+
-				"and insert into the attendees list!", attendee.TicketNum))
+				" and insert into the attendees list!", attendee.TicketNum))
 		} else {
 			attendees = append(attendees, attendee)
 		}
+	}
+	if numErrors > 0 {
+		err = errors.New("one or more attendees were not loaded")
+		dbc.logger.Println(fmt.Sprintf("One or more attendees were not loaded!"))
 	}
 
 	return attendees, err

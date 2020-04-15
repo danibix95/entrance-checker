@@ -1,17 +1,27 @@
 package dbconn
 
-import "github.com/lib/pq"
+import (
+	"database/sql"
+	"github.com/lib/pq"
+)
 
 const TICKETHIGH uint = 1050
 
 type Attendee struct {
+	TicketNum  uint           `json:"ticket_num"`
+	LastName   sql.NullString `json:"last_name"`
+	FirstName  sql.NullString `json:"first_name"`
+	TicketType int            `json:"ticket_type"`
+	Sold       bool           `json:"sold"`
+	Vendor     sql.NullString `json:"vendor"`
+	RespVendor sql.NullString `json:"resp_vendor"`
+	Entered    pq.NullTime    `json:"entered"`
+}
+
+type AttendeeSimple struct {
 	TicketNum  uint        `json:"ticket_num"`
-	LastName   string      `json:"last_name"`
-	FirstName  string      `json:"firs_tname"`
 	TicketType int         `json:"ticket_type"`
 	Sold       bool        `json:"sold"`
-	Vendor     string      `json:"vendor"`
-	RespVendor string      `json:"resp_vendor"`
 	Entered    pq.NullTime `json:"entered"`
 }
 
