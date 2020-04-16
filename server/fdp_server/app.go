@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/danibix95/fdp_server/controller"
 	"github.com/danibix95/fdp_server/dbconn"
 	"github.com/kataras/iris"
@@ -46,17 +45,20 @@ func main() {
 	// APP DEFINITION
 	app := iris.Default()
 
+	app.Post("/login", control.Login)
+
 	privateRoutes := app.Party("/", control.RequireLogin)
 	{
 		privateRoutes.Get("/ping", control.Ping)
-		privateRoutes.Get("/when-entered/{ticketNum:uint max(1050)}", control.WhenEntered)
+		privateRoutes.Get("/when-entered/{ticketNum:uint max("+
+			strconv.FormatUint(uint64(dbconn.TICKETHIGH), 10)+")}",
+			control.WhenEntered)
 
 		// list tickets status
 		privateRoutes.Get("/tickets", control.GetTickets)
 		// get a notification with tickets info (entered vs sold)
 		privateRoutes.Get("/tickets-info", control.GetTicketsStats)
 		// get specific ticket status
-		fmt.Println(strconv.FormatUint(uint64(dbconn.TICKETHIGH), 10))
 		privateRoutes.Get("/tickets/{ticketNum:uint max("+
 			strconv.FormatUint(uint64(dbconn.TICKETHIGH), 10)+")}",
 			control.GetTicketDetails)
@@ -74,7 +76,7 @@ func main() {
 			// UI way to remove an entrance
 			adminRoutes.Post("/entered/undo", control.RollbackEntrance)
 			// Get who sold specified ticket
-			adminRoutes.Post("/ticket/vendor", control.GetTicketVendor)
+			adminRoutes.Get("/ticket/vendor", control.GetTicketVendor)
 		}
 	}
 

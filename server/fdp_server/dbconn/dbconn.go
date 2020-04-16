@@ -28,7 +28,7 @@ const getVendor = `SELECT vendor FROM attendees WHERE ticket_num = $1::integer`
 
 const updateStatus = `UPDATE attendees SET entered = NOW() WHERE ticket_num = $1::integer`
 const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::text,` +
-	`sold = true, resp_vendor = 'entrance', entered = NOW() WHERE ticket_num = $1::integer`
+	`sold = true, resp_vendor = 'Entrance', entered = NOW() WHERE ticket_num = $1::integer`
 const rollbackEntrance = `UPDATE attendees SET entered = NULL WHERE ticket_num = $1::integer`
 
 var statements map[string]*sql.Stmt
@@ -268,4 +268,50 @@ func (dbc *DBController) TicketsList() ([]AttendeeSimple, error) {
 	}
 
 	return attendees, err
+}
+
+func (dbc *DBController) GetCurrentInside(result chan int) {
+	numPeopleEntered := 0
+	err := statements["checkEnteredNum"].QueryRow().Scan(&numPeopleEntered)
+
+	if err != nil {
+		dbc.logger.Println("Error retrieving the number of people entered!")
+		result <- -1 // notify the error through the channel
+	} else {
+		result <- numPeopleEntered
+	}
+}
+
+func (dbc *DBController) GetCurrentSold(result chan int) {
+	numTicketSold := 0
+	err := statements["checkSoldNum"].QueryRow().Scan(&numTicketSold)
+
+	if err != nil {
+		dbc.logger.Println("Error retrieving the number of tickets sold!")
+		result <- -1 // notify the error through the channel
+	} else {
+		result <- numTicketSold
+	}
+}
+
+// Sell selected ticket to
+func (dbc *DBController) SellTicket(ticketNum uint, firstName, lastName string) bool {
+	result := true
+	//attendee := Attendee{TicketNum: ticketNum}
+
+	res, err := statements["sellTicket"].Exec(ticketNum, firstName, lastName)
+	if err != nil {
+		result = false
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Impossible to sell ticket %v!", ticketNum))
+	}
+	count, err := res.RowsAffected()
+	if err != nil || count != 1 {
+		result = false
+		dbc.logger.Panicln(fmt.Sprintf(
+			"Something went wrong selling ticket %v! (changed %v rows)",
+			ticketNum, count))
+	}
+
+	return result
 }

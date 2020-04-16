@@ -7,13 +7,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
-
-// data structure for POST requests
-type Ticket struct {
-	TicketNum uint `json:"ticketNum"`
-}
 
 type AppController struct {
 	dbc    *dbconn.DBController
@@ -52,16 +48,26 @@ func (appc *AppController) RequireLogin(ctx iris.Context) {
 }
 
 func (appc *AppController) Login(ctx iris.Context) {
+	_, _ = ctx.JSON(iris.Map{
+		"message": "Login function not implemented!",
+	})
 }
 
 func (appc *AppController) Logout(ctx iris.Context) {
+	_, _ = ctx.JSON(iris.Map{
+		"message": "Logout function not implemented!",
+	})
 }
 
 func (appc *AppController) IsAdmin(ctx iris.Context) {
+	//_, _ = ctx.JSON(iris.Map{
+	//	"message": "Admin check function not implemented!",
+	//})
+	ctx.Next()
 }
 
 /* ======= TICKETS MANAGEMENT ======= */
-func (appc AppController) readPostTicket(ticket *Ticket, ctx *iris.Context) {
+func (appc AppController) readPostTicket(ticket *dbconn.Ticket, ctx *iris.Context) {
 	err := (*ctx).ReadJSON(ticket)
 	if err != nil {
 		appc.logger.Panicln(fmt.Sprintf("Error reading JSON!\n%v", err))
@@ -110,6 +116,28 @@ func (appc *AppController) GetTickets(ctx iris.Context) {
 }
 
 func (appc *AppController) GetTicketsStats(ctx iris.Context) {
+	cEntered, cSold := make(chan int), make(chan int)
+
+	// run the two database calls concurrently
+	go appc.dbc.GetCurrentInside(cEntered)
+	go appc.dbc.GetCurrentSold(cSold)
+
+	numCurrentInside, numCurrentSold := <-cEntered, <-cSold
+
+	result := iris.Map{
+		"status":        500,
+		"currentInside": numCurrentInside,
+		"currentSold":   numCurrentSold,
+	}
+
+	// check that both goroutines provide a meaningful number
+	if numCurrentInside > -1 && numCurrentSold > -1 {
+		result["status"] = 200
+	} else {
+		appc.logger.Println("Error retrieving tickets stats")
+	}
+
+	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) GetTicketDetails(ctx iris.Context) {
@@ -144,7 +172,7 @@ func (appc *AppController) GetTicketDetails(ctx iris.Context) {
 }
 
 func (appc *AppController) SetEntered(ctx iris.Context) {
-	var ticket Ticket
+	var ticket dbconn.Ticket
 	appc.readPostTicket(&ticket, &ctx)
 
 	// Default result -> the ticket has not been sold
@@ -180,10 +208,38 @@ func (appc *AppController) SetEntered(ctx iris.Context) {
 }
 
 func (appc *AppController) SellTicket(ctx iris.Context) {
+	var ticket dbconn.Ticket
+	appc.readPostTicket(&ticket, &ctx)
+
+	result := iris.Map{
+		"ticketNum": ticket.TicketNum,
+		"status":    500,
+		"msg":       "Failed to sold selected ticket!",
+	}
+
+	// TODO: implement check to avoid overwrite ticket without explicit consent
+
+	if ticket.FirstName == "" || ticket.LastName == "" {
+		result["status"] = 400
+		result["msg"] = fmt.Sprintf("Missing some atteendee details: first name -> %v, last name -> %v",
+			ticket.FirstName, ticket.LastName)
+	} else {
+		// save in the database only capitalized names
+		ticket.FirstName = strings.Title(ticket.FirstName)
+		ticket.LastName = strings.Title(ticket.LastName)
+
+		if appc.dbc.SellTicket(ticket.TicketNum, ticket.FirstName, ticket.LastName) {
+			result["status"] = 200
+			result["msg"] = fmt.Sprintf("Ticket sold correctly to %v %v!",
+				ticket.FirstName, ticket.LastName)
+		}
+	}
+
+	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) RollbackEntrance(ctx iris.Context) {
-	var ticket Ticket
+	var ticket dbconn.Ticket
 	appc.readPostTicket(&ticket, &ctx)
 
 	result := iris.Map{
@@ -203,6 +259,7 @@ func (appc *AppController) RollbackEntrance(ctx iris.Context) {
 }
 
 func (appc *AppController) GetTicketVendor(ctx iris.Context) {
+	//ticketNum, err := ctx.Params().GetUint("ticketNum")
 }
 
 /* ======= ERROR MANAGEMENT ======= */

@@ -30,3 +30,10 @@ type Staff struct {
 	Password string `json:"password"`
 	Admin    bool   `json:"admin"`
 }
+
+// data structure for POST requests
+type Ticket struct {
+	TicketNum uint   `json:"ticket_num"`
+	LastName  string `json:"last_name"`
+	FirstName string `json:"first_name"`
+}
