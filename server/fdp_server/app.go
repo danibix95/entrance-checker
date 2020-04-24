@@ -12,35 +12,10 @@ import (
 
 const logDir string = "logs"
 
-func main() {
-	// to avoid potential errors, create the logs directory if it does not exists
-	if _, err := os.Stat("logs"); err != nil {
-		if os.IsNotExist(err) {
-			dirErr := os.Mkdir("logs", os.ModeDir)
-			if dirErr != nil {
-				panic("Impossible to find or create logs folder!")
-			}
-		}
-	}
-
-	// log files
-	controlLogFile, err := os.OpenFile(filepath.Join(logDir, "control.log"),
-		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		log.Fatalf("Error opening log file: %v", err)
-	}
-	defer controlLogFile.Close()
-
-	dbLogFile, err := os.OpenFile(filepath.Join(logDir, "db_conn.log"),
-		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		log.Fatalf("Error opening log file: %v", err)
-	}
-	defer dbLogFile.Close()
-
+func prepareApp(contLog, dbLog *os.File) *iris.Application {
 	// Before starting the application,
 	// obtain a controller for it, which connects to the database
-	control := controller.New(controlLogFile, dbLogFile)
+	control := controller.New(contLog, dbLog)
 
 	// APP DEFINITION
 	app := iris.Default()
@@ -84,6 +59,37 @@ func main() {
 	app.OnErrorCode(iris.StatusUnauthorized, control.Unauthorized)
 	app.OnErrorCode(iris.StatusNotFound, control.NotFound)
 	app.OnErrorCode(iris.StatusInternalServerError, control.InternalError)
+
+	return app
+}
+
+func main() {
+	// to avoid potential errors, create the logs directory if it does not exists
+	if _, err := os.Stat("logs"); err != nil {
+		if os.IsNotExist(err) {
+			dirErr := os.Mkdir("logs", os.ModeDir)
+			if dirErr != nil {
+				panic("Impossible to find or create logs folder!")
+			}
+		}
+	}
+
+	// log files
+	controlLogFile, err := os.OpenFile(filepath.Join(logDir, "control.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("Error opening log file: %v", err)
+	}
+	defer controlLogFile.Close()
+
+	dbLogFile, err := os.OpenFile(filepath.Join(logDir, "db_conn.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("Error opening log file: %v", err)
+	}
+	defer dbLogFile.Close()
+
+	app := prepareApp(controlLogFile, dbLogFile)
 
 	// with _ = it is possible to ignore the value returned by the method
 	_ = app.Run(iris.Addr(":8080"),

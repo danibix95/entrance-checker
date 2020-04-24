@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import datetime
 
+np.random.seed(42)
+
 # MODEL STRUCTURE
 class Attendee:
   def __init__(self, ticket_num, last_name = None, first_name = None, ticket_type = 10, vendor = None, resp_vendor = None):
@@ -37,13 +39,13 @@ num_tickets = 800
 total_tickets = 1100
 
 # generate vendors
-vendors = pd.read_csv('https://randomuser.me/api/?results={}&inc=name&nat=nl,es,de&format=csv'.format(20),
+vendors = pd.read_csv('https://randomuser.me/api/?results={}&inc=name&nat=nl,es,de&format=csv&seed=42'.format(20),
                       names=['title', 'first_name', 'last_name'], header=0)
 vendors = vendors.drop('title', axis=1)
 vendors_gen = [' '.join(list(v)[1:]).title() for v in vendors.to_records()]
 
 # generate attendees
-attendees = pd.read_csv('https://randomuser.me/api/?results={}&inc=name&nat=nl,es,de&format=csv'.format(num_tickets),
+attendees = pd.read_csv('https://randomuser.me/api/?results={}&inc=name&nat=nl,es,de&format=csv&seed=40320'.format(num_tickets),
                         names=['title', 'first_name', 'last_name'], header=0)
 attendees = attendees.drop('title', axis=1)
 

@@ -19,7 +19,7 @@ type AppController struct {
 func New(controlLogFile *os.File, dbLogFile *os.File) *AppController {
 	appc := AppController{
 		dbc: dbconn.New(dbLogFile),
-		logger: log.New(io.MultiWriter(os.Stderr, controlLogFile),
+		logger: log.New(io.MultiWriter(controlLogFile),
 			"", log.LstdFlags),
 	}
 
@@ -36,10 +36,9 @@ func (appc *AppController) Ping(ctx iris.Context) {
 
 /* ======= LOGIN MANAGEMENT ======= */
 func (appc *AppController) RequireLogin(ctx iris.Context) {
-	appc.logger.Println("User interaction with app content!")
 	// TODO: implement login capabilities!
 	if false {
-		ctx.StatusCode(iris.StatusUnauthorized)
+		appc.Unauthorized(ctx)
 		ctx.EndRequest()
 	} else {
 		// move forward the execution of request chain
@@ -48,35 +47,30 @@ func (appc *AppController) RequireLogin(ctx iris.Context) {
 }
 
 func (appc *AppController) Login(ctx iris.Context) {
-	_, _ = ctx.JSON(iris.Map{
-		"message": "Login function not implemented!",
-	})
+	appc.UnauthorizedMessage(ctx, "login function not implemented yet")
 }
 
 func (appc *AppController) Logout(ctx iris.Context) {
-	_, _ = ctx.JSON(iris.Map{
-		"message": "Logout function not implemented!",
-	})
+	appc.BadRequestMessage(ctx, "logout function not implemented yet")
 }
 
 func (appc *AppController) IsAdmin(ctx iris.Context) {
-	//_, _ = ctx.JSON(iris.Map{
-	//	"message": "Admin check function not implemented!",
-	//})
-	ctx.Next()
+	ctx.Next() // ignore for the moment this function
 }
 
 /* ======= TICKETS MANAGEMENT ======= */
-func (appc AppController) readPostTicket(ticket *dbconn.Ticket, ctx *iris.Context) {
-	err := (*ctx).ReadJSON(ticket)
+func (appc *AppController) readPostTicket(ctx iris.Context, ticket *dbconn.Ticket) {
+	err := ctx.ReadJSON(ticket)
 	if err != nil {
-		appc.logger.Panicln(fmt.Sprintf("Error reading JSON!\n%v", err))
+		msg := fmt.Sprintf("impossible to parse request's JSON data as ticket schema")
+		appc.InternalErrorMessage(ctx, msg)
 	}
 
 	// check ticket is in range
 	if ticket.TicketNum > dbconn.TICKETHIGH {
-		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
-			" Ticket number is not in specified range.", ticket.TicketNum))
+		msg := fmt.Sprintf("ticket number %v is not in the correct range [%v, %v]",
+			ticket.TicketNum, dbconn.TICKETLOW, dbconn.TICKETHIGH)
+		appc.BadRequestMessage(ctx, msg)
 	}
 }
 
@@ -84,35 +78,34 @@ func (appc AppController) readPostTicket(ticket *dbconn.Ticket, ctx *iris.Contex
 func (appc *AppController) WhenEntered(ctx iris.Context) {
 	ticketNum, err := ctx.Params().GetUint("ticketNum")
 	if err != nil {
-		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
-			" Ticket numbers should be a natural number.", ticketNum))
+		msg := fmt.Sprintf("ticket number %v is not valid", ticketNum)
+		appc.BadRequestMessage(ctx, msg)
 	}
-	enteredTime := appc.dbc.WhenEntered(ticketNum)
+	enteredTime, err := appc.dbc.WhenEntered(ticketNum)
 
-	_, _ = ctx.JSON(iris.Map{
-		"ticketNum": ticketNum,
-		"time":      enteredTime.Time,
-		"isEntered": enteredTime.Valid,
-		"status":    200,
-	})
+	if err != nil {
+		appc.InternalErrorMessage(ctx, err.Error())
+	} else {
+		_, _ = ctx.JSON(iris.Map{
+			"ticketNum": ticketNum,
+			"time":      enteredTime.Time,
+			"isEntered": enteredTime.Valid,
+			"status":    iris.StatusOK,
+		})
+	}
 }
 
 func (appc *AppController) GetTickets(ctx iris.Context) {
 	ticketList, err := appc.dbc.TicketsList()
 
-	result := iris.Map{
-		"status":    500,
-		"attendees": nil,
-	}
-
 	if err != nil {
-		result["msg"] = "An error occurred while retrieving the list of attendees!"
+		appc.InternalErrorMessage(ctx, err.Error())
 	} else {
-		result["status"] = 200
-		result["attendees"] = ticketList
+		_, _ = ctx.JSON(iris.Map{
+			"status":    iris.StatusOK,
+			"attendees": ticketList,
+		})
 	}
-
-	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) GetTicketsStats(ctx iris.Context) {
@@ -124,113 +117,118 @@ func (appc *AppController) GetTicketsStats(ctx iris.Context) {
 
 	numCurrentInside, numCurrentSold := <-cEntered, <-cSold
 
-	result := iris.Map{
-		"status":        500,
-		"currentInside": numCurrentInside,
-		"currentSold":   numCurrentSold,
-	}
-
 	// check that both goroutines provide a meaningful number
 	if numCurrentInside > -1 && numCurrentSold > -1 {
-		result["status"] = 200
+		_, _ = ctx.JSON(iris.Map{
+			"status":        iris.StatusOK,
+			"currentInside": numCurrentInside,
+			"currentSold":   numCurrentSold,
+		})
 	} else {
-		appc.logger.Println("Error retrieving tickets stats")
+		msg := fmt.Sprintf(
+			"error retrieving tickets stats - current inside: %v, current sold: %v",
+			numCurrentInside, numCurrentSold)
+		appc.InternalErrorMessage(ctx, msg)
 	}
-
-	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) GetTicketDetails(ctx iris.Context) {
 	ticketNum, err := ctx.Params().GetUint("ticketNum")
+
 	if err != nil || ticketNum > dbconn.TICKETHIGH {
-		appc.logger.Panicln(fmt.Sprintf("Ticket number %v is not valid!"+
-			" Ticket number is not in specified range.", ticketNum))
-	}
-
-	result := iris.Map{
-		"status":   400,
-		"attendee": nil,
-		"exists":   true,
-	}
-
-	attendee, err := appc.dbc.TicketDetails(ticketNum)
-	if err != nil {
-		if ticketNum > dbconn.TICKETHIGH {
-			result["exists"] = false
-			result["msg"] = fmt.Sprintf("Ticket do not exists."+
-				"%v is outside valid range [0-%v]", ticketNum, dbconn.TICKETHIGH)
-		} else {
-			result["msg"] = fmt.Sprintf("Ticket %v has not been sold."+
-				" Therefore no details are available", ticketNum)
-		}
+		msg := fmt.Sprintf("ticket number %v is not in the correct range [%v, %v]",
+			ticketNum, dbconn.TICKETLOW, dbconn.TICKETHIGH)
+		appc.BadRequestMessage(ctx, msg)
 	} else {
-		result["status"] = 200
-		result["attendee"] = attendee
+		if attendee, err := appc.dbc.TicketDetails(ticketNum); err != nil {
+			appc.InternalErrorMessage(ctx,
+				fmt.Sprintf("error retrieving the details of ticket %v", ticketNum))
+		} else {
+			_, _ = ctx.JSON(iris.Map{
+				"status":   iris.StatusOK,
+				"attendee": attendee,
+			})
+		}
 	}
-
-	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) SetEntered(ctx iris.Context) {
 	var ticket dbconn.Ticket
-	appc.readPostTicket(&ticket, &ctx)
+	appc.readPostTicket(ctx, &ticket)
 
 	// Default result -> the ticket has not been sold
 	// and therefore it cannot enter without first pay the entrance
 	result := iris.Map{
 		"ticketNum": ticket.TicketNum,
-		"status":    400,
+		"status":    iris.StatusBadRequest,
 		"entered":   false,
-		"msg":       "Ticket unsold!",
+		"msg":       "ticket unsold - can not enter",
 	}
 
-	switch appc.dbc.IsSoldEntered(ticket.TicketNum) {
-	case dbconn.SOLDENTERED:
-		// notify that the ticket is already entered,
-		// so the same ticket number cannot enter again
-		result["entered"] = true
-		result["msg"] = "Ticket sold and already entered."
-	case dbconn.SOLD:
-		if appc.dbc.SetEntered(ticket.TicketNum) {
-			// successful update
-			result["status"] = 200
+	status, err := appc.dbc.IsSoldEntered(ticket.TicketNum)
+
+	if err != nil {
+		appc.InternalErrorMessage(ctx, fmt.Sprintf(
+			"Error encountered while allowing the entrance to ticket %v",
+			ticket.TicketNum))
+	} else {
+		switch status {
+		case dbconn.SOLDENTERED:
+			ctx.StatusCode(iris.StatusBadRequest)
+			// notify that the ticket is already entered,
+			// so the same ticket number cannot enter again
 			result["entered"] = true
-			result["msg"] = "Ticket entered correctly!"
+			result["msg"] = "ticket is sold and already entered"
+		case dbconn.SOLD:
+			if err := appc.dbc.SetEntered(ticket.TicketNum); err != nil {
+				appc.InternalErrorMessage(ctx,
+					fmt.Sprintf("error occurred setting ticket %v as entered", ticket.TicketNum))
+			} else {
+				// successful update
+				result["status"] = iris.StatusOK
+				result["entered"] = true
+				result["msg"] = "ticket set as entered correctly"
 
-			appc.logger.Println(fmt.Sprintf("Ticket %v entered", ticket.TicketNum))
-		} else {
-			result["status"] = 500
-			result["msg"] = "Error encountered while allowing the entrance to this ticket..."
+				appc.logger.Println(fmt.Sprintf("ticket %v entered", ticket.TicketNum))
+			}
+		case dbconn.UNSOLD:
+			ctx.StatusCode(iris.StatusBadRequest)
 		}
+
+		_, _ = ctx.JSON(result)
 	}
 
-	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) SellTicket(ctx iris.Context) {
 	var ticket dbconn.Ticket
-	appc.readPostTicket(&ticket, &ctx)
+	appc.readPostTicket(ctx, &ticket)
 
 	result := iris.Map{
 		"ticketNum": ticket.TicketNum,
-		"status":    500,
-		"msg":       "Failed to sold selected ticket!",
+		"status":    iris.StatusInternalServerError,
+		"msg":       "failed to sold selected ticket",
 	}
 
-	// TODO: implement check to avoid overwrite ticket without explicit consent
+	// TODO: implement check to avoid overwrite existing ticket without explicit confirmation
 
 	if ticket.FirstName == "" || ticket.LastName == "" {
-		result["status"] = 400
-		result["msg"] = fmt.Sprintf("Missing some atteendee details: first name -> %v, last name -> %v",
+		ctx.StatusCode(iris.StatusBadRequest)
+		result["status"] = iris.StatusBadRequest
+		result["msg"] = fmt.Sprintf("missing some atteendee details - first_name: %v, last_name: %v",
 			ticket.FirstName, ticket.LastName)
 	} else {
 		// save in the database only capitalized names
 		ticket.FirstName = strings.Title(ticket.FirstName)
 		ticket.LastName = strings.Title(ticket.LastName)
 
-		if appc.dbc.SellTicket(ticket.TicketNum, ticket.FirstName, ticket.LastName) {
-			result["status"] = 200
-			result["msg"] = fmt.Sprintf("Ticket sold correctly to %v %v!",
+		err := appc.dbc.SellTicket(ticket.TicketNum, ticket.FirstName, ticket.LastName)
+
+		if err != nil {
+			ctx.StatusCode(iris.StatusInternalServerError)
+		} else {
+			result["status"] = iris.StatusOK
+			result["msg"] = fmt.Sprintf("ticket sold correctly to %v %v!",
 				ticket.FirstName, ticket.LastName)
 		}
 	}
@@ -240,22 +238,24 @@ func (appc *AppController) SellTicket(ctx iris.Context) {
 
 func (appc *AppController) RollbackEntrance(ctx iris.Context) {
 	var ticket dbconn.Ticket
-	appc.readPostTicket(&ticket, &ctx)
+	appc.readPostTicket(ctx, &ticket)
 
-	result := iris.Map{
-		"ticketNum": ticket.TicketNum,
-		"status":    500,
-		"rollback":  false,
-		"msg":       "Entrance rollback failed!",
+	if err := appc.dbc.RollbackEntrance(ticket.TicketNum); err != nil {
+		ctx.StatusCode(iris.StatusInternalServerError)
+		_, _ = ctx.JSON(iris.Map{
+			"ticketNum": ticket.TicketNum,
+			"status":    iris.StatusInternalServerError,
+			"rollback":  false,
+			"msg":       "entrance rollback failed",
+		})
+	} else {
+		_, _ = ctx.JSON(iris.Map{
+			"ticketNum": ticket.TicketNum,
+			"status":    iris.StatusOK,
+			"rollback":  true,
+			"msg":       "entrance rollback correctly executed",
+		})
 	}
-
-	if appc.dbc.RollbackEntrance(ticket.TicketNum) {
-		result["status"] = 200
-		result["rollback"] = true
-		result["msg"] = "Entrance rollback correctly executed!"
-	}
-
-	_, _ = ctx.JSON(result)
 }
 
 func (appc *AppController) GetTicketVendor(ctx iris.Context) {
@@ -263,19 +263,52 @@ func (appc *AppController) GetTicketVendor(ctx iris.Context) {
 }
 
 /* ======= ERROR MANAGEMENT ======= */
-func (appc *AppController) Unauthorized(ctx iris.Context) {
+func (appc *AppController) BadRequest(ctx iris.Context) {
+	appc.BadRequestMessage(ctx, "Provided request can not be understood.")
+}
+func (appc *AppController) BadRequestMessage(ctx iris.Context, msg string) {
+	appc.logger.Println(ctx.Path() + " - " + msg)
+	ctx.StatusCode(iris.StatusBadRequest)
 	_, _ = ctx.JSON(iris.Map{
-		"status": 401,
+		"status": iris.StatusBadRequest,
+		"msg":    msg,
+	})
+}
+
+func (appc *AppController) Unauthorized(ctx iris.Context) {
+	appc.UnauthorizedMessage(ctx, "You are not authorized to access this resource.")
+}
+func (appc *AppController) UnauthorizedMessage(ctx iris.Context, msg string) {
+	appc.logger.Println(ctx.Path() + " - " + msg)
+	ctx.StatusCode(iris.StatusUnauthorized)
+	_, _ = ctx.JSON(iris.Map{
+		"status": iris.StatusUnauthorized,
+		"msg":    msg,
 	})
 }
 
 func (appc *AppController) NotFound(ctx iris.Context) {
+	appc.NotFoundMessage(ctx,
+		fmt.Sprintf("Resource requested at %v not found.", ctx.Path()))
+}
+func (appc *AppController) NotFoundMessage(ctx iris.Context, msg string) {
+	appc.logger.Println(ctx.Path() + " - " + msg)
+	ctx.StatusCode(iris.StatusNotFound)
 	_, _ = ctx.JSON(iris.Map{
-		"status": 404,
+		"status": iris.StatusNotFound,
+		"msg":    msg,
 	})
 }
+
 func (appc *AppController) InternalError(ctx iris.Context) {
+	appc.InternalErrorMessage(ctx,
+		"Server has encountered an error and can not satisfy the request.")
+}
+func (appc *AppController) InternalErrorMessage(ctx iris.Context, msg string) {
+	appc.logger.Println(ctx.Path() + " - " + msg)
+	ctx.StatusCode(iris.StatusInternalServerError)
 	_, _ = ctx.JSON(iris.Map{
-		"status": 500,
+		"status": iris.StatusInternalServerError,
+		"msg":    msg,
 	})
 }

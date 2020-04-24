@@ -5,6 +5,7 @@ import (
 	"github.com/lib/pq"
 )
 
+const TICKETLOW uint = 0
 const TICKETHIGH uint = 1050
 
 type Attendee struct {
