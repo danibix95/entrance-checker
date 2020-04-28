@@ -238,6 +238,30 @@ func (dbc *DBController) TicketDetails(ticketNum uint) (Attendee, error) {
 	return attendee, userErr
 }
 
+// Return the information of the specified ticket
+func (dbc *DBController) TicketVendor(ticketNum uint) (Attendee, error) {
+	var attendee = Attendee{TicketNum: ticketNum}
+	var userErr error
+
+	err := statements["getVendor"].QueryRow(attendee.TicketNum).
+		Scan(&attendee.TicketNum, &attendee.FirstName, &attendee.LastName,
+			&attendee.TicketType, &attendee.Sold, &attendee.Vendor,
+			&attendee.RespVendor, &attendee.Entered)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			userErr = fmt.Errorf("ticket %v does not exist (not in the valid range)",
+				attendee.TicketNum)
+		} else {
+			userErr = fmt.Errorf("impossible to retrieve ticket %v details",
+				attendee.TicketNum)
+		}
+		dbc.logger.Println(userErr.Error(), err)
+	}
+
+	return attendee, userErr
+}
+
 // Return the list of all the tickets
 func (dbc *DBController) TicketsList() ([]AttendeeSimple, error) {
 	var attendees []AttendeeSimple

@@ -12,7 +12,7 @@ class Attendee:
     self.ticket_num = ticket_num
     self.last_name = last_name.capitalize() if isinstance(last_name, str) else last_name
     self.first_name = first_name.capitalize() if isinstance(first_name, str) else first_name
-    self.ticket_type = ticket_type if ticket_num < 1000 else 0 
+    self.ticket_type = ticket_type if ticket_num < 1000 else 0
     self.sold = 1 if last_name is not None and np.random.random() > 0.15 else 0
     self.vendor = vendor if last_name is not None else None
     self.resp_vendor = resp_vendor
@@ -50,7 +50,7 @@ attendees = pd.read_csv('https://randomuser.me/api/?results={}&inc=name&nat=nl,e
 attendees = attendees.drop('title', axis=1)
 
 ticket_numbers = np.random.choice(total_tickets, total_tickets, replace=False)
-attendees_gen = [Attendee(i+1, r[1], r[2], 10, vendors_gen[np.random.randint(len(vendors_gen))], 'Generator')
+attendees_gen = [Attendee(i+1, r[2], r[1], 10, vendors_gen[np.random.randint(len(vendors_gen))], 'Generator')
                  for r,i in zip(attendees.to_records(), ticket_numbers[:attendees.shape[0]])]
 
 # add unsold tickets and sort the results according to ticket number

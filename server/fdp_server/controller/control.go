@@ -240,6 +240,23 @@ func (appc *AppController) RollbackEntrance(ctx iris.Context) {
 	var ticket dbconn.Ticket
 	appc.readPostTicket(ctx, &ticket)
 
+	// verify whether the ticket is already entered
+	if enteredTime, err := appc.dbc.WhenEntered(ticket.TicketNum); err != nil {
+		appc.InternalErrorMessage(ctx, err.Error())
+	} else {
+		if !enteredTime.Valid {
+			ctx.StatusCode(iris.StatusBadRequest)
+			_, _ = ctx.JSON(iris.Map{
+				"ticketNum": ticket.TicketNum,
+				"status":    iris.StatusBadRequest,
+				"rollback":  false,
+				"msg":       "ticket not entered - rollback not performed",
+			})
+			// do not execute the rollback if it is already set as not entered
+			return
+		}
+	}
+
 	if err := appc.dbc.RollbackEntrance(ticket.TicketNum); err != nil {
 		ctx.StatusCode(iris.StatusInternalServerError)
 		_, _ = ctx.JSON(iris.Map{
@@ -259,7 +276,23 @@ func (appc *AppController) RollbackEntrance(ctx iris.Context) {
 }
 
 func (appc *AppController) GetTicketVendor(ctx iris.Context) {
-	//ticketNum, err := ctx.Params().GetUint("ticketNum")
+	ticketNum, err := ctx.Params().GetUint("ticketNum")
+
+	if err != nil || ticketNum > dbconn.TICKETHIGH {
+		msg := fmt.Sprintf("ticket number %v is not in the correct range [%v, %v]",
+			ticketNum, dbconn.TICKETLOW, dbconn.TICKETHIGH)
+		appc.BadRequestMessage(ctx, msg)
+	} else {
+		if attendee, err := appc.dbc.TicketVendor(ticketNum); err != nil {
+			appc.InternalErrorMessage(ctx,
+				fmt.Sprintf("error retrieving the details of ticket %v", ticketNum))
+		} else {
+			_, _ = ctx.JSON(iris.Map{
+				"status": iris.StatusOK,
+				"vendor": attendee.Vendor,
+			})
+		}
+	}
 }
 
 /* ======= ERROR MANAGEMENT ======= */
