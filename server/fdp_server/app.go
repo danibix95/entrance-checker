@@ -48,10 +48,14 @@ func prepareApp(contLog, dbLog *os.File) *iris.Application {
 		{
 			// add a ticket to dataset
 			adminRoutes.Post("/sell", control.SellTicket)
+			// set the default empty details for selected ticket
+			adminRoutes.Post("/reset", control.ResetTicket)
 			// UI way to remove an entrance
 			adminRoutes.Post("/entered/undo", control.RollbackEntrance)
 			// Get who sold specified ticket
-			adminRoutes.Get("/ticket/vendor", control.GetTicketVendor)
+			adminRoutes.Get("/vendor/{ticketNum:uint max("+
+				strconv.FormatUint(uint64(dbconn.TICKETHIGH), 10)+")}",
+				control.GetTicketVendor)
 		}
 	}
 

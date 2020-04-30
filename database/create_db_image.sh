@@ -1,7 +1,11 @@
 #! /usr/bin/bash
 
-# create if not exist the folder containing the volume data (not needed at the moment)
-# mkdir -p postgres_data
-
 # run only the first time
-docker build -t fdp_db .
+echo "-- Building FdP Database --"
+if [[ "$1" == "--test" ]]; then
+    echo "-- DEVELOPMENT IMAGE --"
+    docker build -f Dockerfile.test -t fdp_db .
+else
+    echo "-- PRODUCTION IMAGE --"
+    docker build -t fdp_db .
+fi

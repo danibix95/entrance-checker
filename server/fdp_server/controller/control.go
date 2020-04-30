@@ -59,7 +59,7 @@ func (appc *AppController) IsAdmin(ctx iris.Context) {
 }
 
 /* ======= TICKETS MANAGEMENT ======= */
-func (appc *AppController) readPostTicket(ctx iris.Context, ticket *dbconn.Ticket) {
+func (appc *AppController) readPostTicket(ctx iris.Context, ticket *dbconn.Ticket) error {
 	err := ctx.ReadJSON(ticket)
 	if err != nil {
 		msg := fmt.Sprintf("impossible to parse request's JSON data as ticket schema")
@@ -72,6 +72,8 @@ func (appc *AppController) readPostTicket(ctx iris.Context, ticket *dbconn.Ticke
 			ticket.TicketNum, dbconn.TICKETLOW, dbconn.TICKETHIGH)
 		appc.BadRequestMessage(ctx, msg)
 	}
+
+	return err
 }
 
 // Used to check whether and when an attendee entered to the party
@@ -109,25 +111,29 @@ func (appc *AppController) GetTickets(ctx iris.Context) {
 }
 
 func (appc *AppController) GetTicketsStats(ctx iris.Context) {
-	cEntered, cSold := make(chan int), make(chan int)
+	cEntered, cSold, cEnteredPaying := make(chan int), make(chan int), make(chan int)
 
 	// run the two database calls concurrently
 	go appc.dbc.GetCurrentInside(cEntered)
 	go appc.dbc.GetCurrentSold(cSold)
+	go appc.dbc.GetCurrentEnteredPaying(cEnteredPaying)
 
 	numCurrentInside, numCurrentSold := <-cEntered, <-cSold
+	numCurrentPaying := <-cEnteredPaying
 
 	// check that both goroutines provide a meaningful number
 	if numCurrentInside > -1 && numCurrentSold > -1 {
 		_, _ = ctx.JSON(iris.Map{
-			"status":        iris.StatusOK,
-			"currentInside": numCurrentInside,
-			"currentSold":   numCurrentSold,
+			"status":               iris.StatusOK,
+			"currentInside":        numCurrentInside,
+			"currentSold":          numCurrentSold,
+			"currentPayingEntered": numCurrentPaying,
 		})
 	} else {
 		msg := fmt.Sprintf(
-			"error retrieving tickets stats - current inside: %v, current sold: %v",
-			numCurrentInside, numCurrentSold)
+			"error retrieving tickets stats - current inside: %v,"+
+				"current sold: %v, currently paying inside: %v",
+			numCurrentInside, numCurrentSold, numCurrentPaying)
 		appc.InternalErrorMessage(ctx, msg)
 	}
 }
@@ -154,7 +160,11 @@ func (appc *AppController) GetTicketDetails(ctx iris.Context) {
 
 func (appc *AppController) SetEntered(ctx iris.Context) {
 	var ticket dbconn.Ticket
-	appc.readPostTicket(ctx, &ticket)
+	if err := appc.readPostTicket(ctx, &ticket); err != nil {
+		ctx.ResponseWriter().FlushResponse()
+		ctx.ResponseWriter().EndResponse()
+		return
+	}
 
 	// Default result -> the ticket has not been sold
 	// and therefore it cannot enter without first pay the entrance
@@ -202,25 +212,50 @@ func (appc *AppController) SetEntered(ctx iris.Context) {
 
 func (appc *AppController) SellTicket(ctx iris.Context) {
 	var ticket dbconn.Ticket
-	appc.readPostTicket(ctx, &ticket)
+	if err := appc.readPostTicket(ctx, &ticket); err != nil {
+		ctx.ResponseWriter().FlushResponse()
+		ctx.ResponseWriter().EndResponse()
+		return
+	}
 
 	result := iris.Map{
 		"ticketNum": ticket.TicketNum,
 		"status":    iris.StatusInternalServerError,
+		"soldNow":   false,
+		"entered":   false,
 		"msg":       "failed to sold selected ticket",
 	}
-
-	// TODO: implement check to avoid overwrite existing ticket without explicit confirmation
 
 	if ticket.FirstName == "" || ticket.LastName == "" {
 		ctx.StatusCode(iris.StatusBadRequest)
 		result["status"] = iris.StatusBadRequest
-		result["msg"] = fmt.Sprintf("missing some atteendee details - first_name: %v, last_name: %v",
+		result["msg"] = fmt.Sprintf(
+			"missing some atteendee details - first_name: %v, last_name: %v",
 			ticket.FirstName, ticket.LastName)
 	} else {
 		// save in the database only capitalized names
 		ticket.FirstName = strings.Title(ticket.FirstName)
 		ticket.LastName = strings.Title(ticket.LastName)
+
+		// verify whether the ticket can be sold
+		if attendee, err := appc.dbc.TicketDetails(ticket.TicketNum); err != nil {
+			appc.InternalErrorMessage(ctx, err.Error())
+		} else {
+			if attendee.FirstName.Valid || attendee.Sold {
+				ctx.StatusCode(iris.StatusBadRequest)
+				_, _ = ctx.JSON(iris.Map{
+					"ticketNum": ticket.TicketNum,
+					"status":    iris.StatusBadRequest,
+					"soldNow":   false,
+					"entered":   attendee.Entered.Valid,
+					"msg":       "this ticket can not sold - either reserved or already sold",
+				})
+				// do not execute the rollback if it is already set as not entered
+				ctx.ResponseWriter().FlushResponse()
+				ctx.ResponseWriter().EndResponse()
+				return
+			}
+		}
 
 		err := appc.dbc.SellTicket(ticket.TicketNum, ticket.FirstName, ticket.LastName)
 
@@ -228,7 +263,9 @@ func (appc *AppController) SellTicket(ctx iris.Context) {
 			ctx.StatusCode(iris.StatusInternalServerError)
 		} else {
 			result["status"] = iris.StatusOK
-			result["msg"] = fmt.Sprintf("ticket sold correctly to %v %v!",
+			result["soldNow"] = true
+			result["entered"] = true
+			result["msg"] = fmt.Sprintf("ticket sold correctly to %v %v",
 				ticket.FirstName, ticket.LastName)
 		}
 	}
@@ -236,9 +273,37 @@ func (appc *AppController) SellTicket(ctx iris.Context) {
 	_, _ = ctx.JSON(result)
 }
 
+func (appc *AppController) ResetTicket(ctx iris.Context) {
+	var ticket dbconn.Ticket
+	if err := appc.readPostTicket(ctx, &ticket); err != nil {
+		ctx.ResponseWriter().FlushResponse()
+		ctx.ResponseWriter().EndResponse()
+		return
+	}
+
+	result := iris.Map{
+		"ticketNum": ticket.TicketNum,
+		"status":    iris.StatusInternalServerError,
+		"msg":       "failed to reset selected ticket",
+	}
+
+	if err := appc.dbc.ResetTicket(ticket.TicketNum); err != nil {
+		appc.InternalErrorMessage(ctx, err.Error())
+	} else {
+		result["status"] = iris.StatusOK
+		result["msg"] = "ticket reset correctly"
+	}
+
+	_, _ = ctx.JSON(result)
+}
+
 func (appc *AppController) RollbackEntrance(ctx iris.Context) {
 	var ticket dbconn.Ticket
-	appc.readPostTicket(ctx, &ticket)
+	if err := appc.readPostTicket(ctx, &ticket); err != nil {
+		ctx.ResponseWriter().FlushResponse()
+		ctx.ResponseWriter().EndResponse()
+		return
+	}
 
 	// verify whether the ticket is already entered
 	if enteredTime, err := appc.dbc.WhenEntered(ticket.TicketNum); err != nil {
@@ -253,6 +318,8 @@ func (appc *AppController) RollbackEntrance(ctx iris.Context) {
 				"msg":       "ticket not entered - rollback not performed",
 			})
 			// do not execute the rollback if it is already set as not entered
+			ctx.ResponseWriter().FlushResponse()
+			ctx.ResponseWriter().EndResponse()
 			return
 		}
 	}

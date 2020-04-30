@@ -23,12 +23,16 @@ const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold
 const isSoldEntered = `SELECT sold, entered FROM attendees WHERE ticket_num = $1::integer`
 const checkEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL`
 const checkSoldNum = `SELECT COUNT(*) FROM attendees WHERE sold = TRUE`
+const checkSoldEnteredNum = `SELECT COUNT(*) FROM attendees WHERE entered IS NOT NULL ` +
+	`AND sold = TRUE AND ticket_type > 0`
 const getEntrance = `SELECT entered FROM attendees WHERE ticket_num = $1::integer`
 const getVendor = `SELECT vendor FROM attendees WHERE ticket_num = $1::integer`
 
 const updateStatus = `UPDATE attendees SET entered = NOW() WHERE ticket_num = $1::integer`
 const sellTicket = `UPDATE attendees SET last_name = $3::text, first_name = $2::text,` +
 	`sold = true, resp_vendor = 'Entrance', entered = NOW() WHERE ticket_num = $1::integer`
+const resetTicket = `UPDATE attendees SET last_name = NULL, first_name = NULL,` +
+	`sold = false, vendor = NULL, entered = NULL WHERE ticket_num = $1::integer`
 const rollbackEntrance = `UPDATE attendees SET entered = NULL WHERE ticket_num = $1::integer`
 
 var statements map[string]*sql.Stmt
@@ -98,10 +102,12 @@ func (dbc *DBController) prepareQueries() {
 	stmtMap["isSoldEntered"], _ = dbc.db.Prepare(isSoldEntered)
 	stmtMap["checkEnteredNum"], _ = dbc.db.Prepare(checkEnteredNum)
 	stmtMap["checkSoldNum"], _ = dbc.db.Prepare(checkSoldNum)
+	stmtMap["checkSoldEnteredNum"], _ = dbc.db.Prepare(checkSoldEnteredNum)
 	stmtMap["getEntrance"], _ = dbc.db.Prepare(getEntrance)
 	stmtMap["getVendor"], _ = dbc.db.Prepare(getVendor)
 	stmtMap["updateStatus"], _ = dbc.db.Prepare(updateStatus)
 	stmtMap["sellTicket"], _ = dbc.db.Prepare(sellTicket)
+	stmtMap["resetTicket"], _ = dbc.db.Prepare(resetTicket)
 	stmtMap["rollbackEntrance"], _ = dbc.db.Prepare(rollbackEntrance)
 
 	statements = stmtMap
@@ -243,18 +249,15 @@ func (dbc *DBController) TicketVendor(ticketNum uint) (Attendee, error) {
 	var attendee = Attendee{TicketNum: ticketNum}
 	var userErr error
 
-	err := statements["getVendor"].QueryRow(attendee.TicketNum).
-		Scan(&attendee.TicketNum, &attendee.FirstName, &attendee.LastName,
-			&attendee.TicketType, &attendee.Sold, &attendee.Vendor,
-			&attendee.RespVendor, &attendee.Entered)
+	err := statements["getVendor"].QueryRow(attendee.TicketNum).Scan(&attendee.Vendor)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
 			userErr = fmt.Errorf("ticket %v does not exist (not in the valid range)",
 				attendee.TicketNum)
 		} else {
-			userErr = fmt.Errorf("impossible to retrieve ticket %v details",
-				attendee.TicketNum)
+			userErr = fmt.Errorf("impossible to retrieve ticket %v details, %v",
+				attendee.TicketNum, err.Error())
 		}
 		dbc.logger.Println(userErr.Error(), err)
 	}
@@ -323,6 +326,20 @@ func (dbc *DBController) GetCurrentSold(result chan int) {
 	}
 }
 
+// Retrieve the amount of tickets that have been currently sold (paid) and entered
+// This function does not consider free tickets (omaggi)
+func (dbc *DBController) GetCurrentEnteredPaying(result chan int) {
+	numTicketSoldEntered := 0
+	err := statements["checkSoldEnteredNum"].QueryRow().Scan(&numTicketSoldEntered)
+
+	if err != nil {
+		dbc.logger.Println("error retrieving the number of paying tickets entered")
+		result <- -1 // notify the error through the channel
+	} else {
+		result <- numTicketSoldEntered
+	}
+}
+
 // Sell selected ticket to a specific person
 func (dbc *DBController) SellTicket(ticketNum uint, firstName, lastName string) error {
 	var userErr error
@@ -336,6 +353,27 @@ func (dbc *DBController) SellTicket(ticketNum uint, firstName, lastName string) 
 		count, err := res.RowsAffected()
 		if err != nil || count != 1 {
 			userErr = fmt.Errorf("something went wrong selling ticket %v", ticketNum)
+			dbc.logger.Println(userErr.Error(),
+				fmt.Sprintf("(changed %v rows)", count), err)
+		}
+	}
+
+	return userErr
+}
+
+// Sell selected ticket to a specific person
+func (dbc *DBController) ResetTicket(ticketNum uint) error {
+	var userErr error
+
+	res, err := statements["resetTicket"].Exec(ticketNum)
+	if err != nil {
+		userErr = fmt.Errorf(
+			"impossible to reset ticket %v", ticketNum)
+		dbc.logger.Println(userErr.Error(), err)
+	} else {
+		count, err := res.RowsAffected()
+		if err != nil || count != 1 {
+			userErr = fmt.Errorf("something went wrong resetting ticket %v", ticketNum)
 			dbc.logger.Println(userErr.Error(),
 				fmt.Sprintf("(changed %v rows)", count), err)
 		}

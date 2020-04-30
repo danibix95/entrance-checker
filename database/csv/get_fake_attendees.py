@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import datetime
 
-np.random.seed(42)
+np.random.seed(7240)
 
 # MODEL STRUCTURE
 class Attendee:
@@ -36,7 +36,7 @@ class Attendee:
 
 # how many tickets should be sold for the test
 num_tickets = 800
-total_tickets = 1100
+total_tickets = 1050
 
 # generate vendors
 vendors = pd.read_csv('https://randomuser.me/api/?results={}&inc=name&nat=nl,es,de&format=csv&seed=42'.format(20),
