@@ -1,0 +1,16 @@
+version: "3.8"
+services:
+    api:
+        build:
+            context: ./server
+            dockerfile: Dockerfile
+        ports:
+            - "8080:8080"
+        depends_on:
+            - "db"
+    db:
+        build:
+            context: ./database
+            dockerfile: Dockerfile.test
+        ports:
+            - "5432:5432"

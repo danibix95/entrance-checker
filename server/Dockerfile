@@ -1,5 +1,5 @@
 ## Component 1: build the application ##
-FROM golang:alpine as builder
+FROM golang:1.14-alpine as builder
 
 # install required packages to retrieve
 # the dependencies and compile the source code
@@ -27,7 +27,7 @@ RUN GOOS=linux go install -a -installsuffix cgo
 
 
 ## Component 2: deploy the application ##
-FROM golang:alpine as server
+FROM golang:1.14-alpine as server
 
 # install the package to deal with timezones
 RUN apk add --no-cache tzdata
@@ -42,13 +42,13 @@ WORKDIR /app/
 
 # copy application binary file
 COPY --from=builder $GOBIN/fdp_server .
-COPY postgres_info .
+COPY app_secrets .
 
 EXPOSE 8080
 
 # prepare the environment for the execution
 RUN mkdir logs
-RUN chmod 400 /app/postgres_info
+RUN chmod 400 /app/app_secrets
 RUN chown fdp_user:fdp_user -R /app/
 
 # Use an unprivileged user to run the application
