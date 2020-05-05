@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/danibix95/fdp_server/controller"
 	"github.com/danibix95/fdp_server/dbconn"
-	"github.com/kataras/iris"
+	"github.com/kataras/iris/v12"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,10 +12,10 @@ import (
 
 const logDir string = "logs"
 
-func prepareApp(contLog, dbLog *os.File) *iris.Application {
+func prepareApp(config controller.AppConfig) *iris.Application {
 	// Before starting the application,
 	// obtain a controller for it, which connects to the database
-	control := controller.New(contLog, dbLog)
+	control := controller.New(config)
 
 	// APP DEFINITION
 	app := iris.Default()
@@ -93,7 +93,15 @@ func main() {
 	}
 	defer dbLogFile.Close()
 
-	app := prepareApp(controlLogFile, dbLogFile)
+	var app *iris.Application
+
+	appConfig := controller.AppConfig{
+		ControlLogFile: controlLogFile,
+		DbLogFile:      dbLogFile,
+		SecretsFile:    "app_secrets",
+	}
+
+	app = prepareApp(appConfig)
 
 	// with _ = it is possible to ignore the value returned by the method
 	_ = app.Run(iris.Addr(":8080"),

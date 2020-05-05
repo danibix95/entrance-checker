@@ -1,12 +1,9 @@
 package dbconn
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/joho/godotenv"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	"io"
@@ -15,7 +12,7 @@ import (
 )
 
 /* =========== QUERIES ========= */
-const getCredentials = `SELECT username, password FROM fdp_staff WHERE username = $1::text`
+const getCredentials = `SELECT password, is_admin FROM fdp_staff WHERE username = $1::text`
 const getAttendees = `SELECT ticket_num, ticket_type, sold, entered FROM attendees ORDER BY ticket_num`
 const getAttendee = `SELECT ticket_num, first_name, last_name, ticket_type, sold, vendor` +
 	`, resp_vendor, entered FROM attendees WHERE ticket_num = $1::integer`
@@ -51,23 +48,18 @@ type DBController struct {
 	logger *log.Logger
 }
 
-func New(logFile *os.File) *DBController {
+func New(logFile *os.File, secrets map[string]string) *DBController {
 	var dbc DBController
 
 	dbc.logger = log.New(io.MultiWriter(logFile), "", log.LstdFlags)
-	dbc.connect()
+	dbc.connect(secrets)
 	dbc.prepareQueries()
 
 	return &dbc
 }
 
 // Initialize the database controller and prepare relevant queries to be executed
-func (dbc *DBController) connect() {
-	// read the information for connecting to postgres database from postgres_info file
-	dbConf, envErr := godotenv.Read("postgres_info")
-	if envErr != nil {
-		dbc.logger.Fatal("Error loading connection info from specified file!")
-	}
+func (dbc *DBController) connect(dbConf map[string]string) {
 	var psqlInfo = fmt.Sprintf(
 		"host=%s port=%v user=%s password=%s dbname=%s sslmode=disable",
 		dbConf["HOST"], dbConf["PORT"], dbConf["USER"], dbConf["PWD"], dbConf["DB_NAME"])
@@ -96,7 +88,7 @@ func (dbc *DBController) PingDB() {
 func (dbc *DBController) prepareQueries() {
 	stmtMap := map[string]*sql.Stmt{}
 
-	stmtMap["getCredential"], _ = dbc.db.Prepare(getCredentials)
+	stmtMap["getCredentials"], _ = dbc.db.Prepare(getCredentials)
 	stmtMap["getAttendees"], _ = dbc.db.Prepare(getAttendees)
 	stmtMap["getAttendee"], _ = dbc.db.Prepare(getAttendee)
 	stmtMap["isSoldEntered"], _ = dbc.db.Prepare(isSoldEntered)
@@ -121,10 +113,30 @@ func (dbc *DBController) CloseDB() {
 }
 
 /* ============= DATABASE ACCESSES ============= */
-func getHash(message string) string {
-	hash := sha256.New()
-	_, _ = hash.Write([]byte(message))
-	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
+func (dbc *DBController) VerifyCredentials(username, password string) (bool, error) {
+	user := Staff{Username: username}
+	var userError error
+
+	err := statements["getCredentials"].QueryRow(user.Username).
+		Scan(&user.Password, &user.IsAdmin)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			userError = fmt.Errorf("no user selected by given username: %v",
+				username)
+		} else {
+			userError = fmt.Errorf("impossible to retrieve credentials for user %v",
+				username)
+		}
+		dbc.logger.Println(userError.Error(), err)
+	} else {
+		if password != user.Password {
+			userError = fmt.Errorf("given password for user %v is incorrect",
+				username)
+			dbc.logger.Println(userError.Error())
+		}
+	}
+
+	return user.IsAdmin, userError
 }
 
 // Retrieve from the database the timestamp of when selected tickets checked-in at Party's entrance

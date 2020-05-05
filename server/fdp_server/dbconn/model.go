@@ -29,7 +29,12 @@ type AttendeeSimple struct {
 type Staff struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	Admin    bool   `json:"admin"`
+	IsAdmin  bool   `json:"is_admin"`
+}
+
+type Login struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // data structure for POST requests

@@ -1,9 +1,14 @@
 package controller
 
 import (
+	"crypto/sha512"
 	"fmt"
 	"github.com/danibix95/fdp_server/dbconn"
-	"github.com/kataras/iris"
+	jwtgo "github.com/dgrijalva/jwt-go"
+	"github.com/iris-contrib/middleware/jwt"
+	_ "github.com/iris-contrib/middleware/jwt"
+	"github.com/joho/godotenv"
+	"github.com/kataras/iris/v12"
 	"io"
 	"log"
 	"os"
@@ -12,16 +17,57 @@ import (
 )
 
 type AppController struct {
-	dbc    *dbconn.DBController
-	logger *log.Logger
+	dbc           *dbconn.DBController
+	logger        *log.Logger
+	jwtSecret     []byte
+	refreshSecret string
+	jwtMdw        *jwt.Middleware
 }
 
-func New(controlLogFile *os.File, dbLogFile *os.File) *AppController {
-	appc := AppController{
-		dbc: dbconn.New(dbLogFile),
-		logger: log.New(io.MultiWriter(controlLogFile),
-			"", log.LstdFlags),
+type AppConfig struct {
+	ControlLogFile *os.File
+	DbLogFile      *os.File
+	SecretsFile    string
+}
+
+func getHash(message string) []byte {
+	hash := sha512.New()
+	_, err := hash.Write([]byte(message))
+	if err != nil {
+		// terminate the application if it is not possible to obtain the secret
+		log.Fatalln(err.Error())
 	}
+	return hash.Sum(nil)
+}
+
+func New(config AppConfig) *AppController {
+	// load secretes
+	secrets, envErr := godotenv.Read(config.SecretsFile)
+	if envErr != nil {
+		log.Fatal("Error loading app secrets info!")
+	}
+
+	appc := AppController{
+		dbc: dbconn.New(config.DbLogFile, secrets),
+		logger: log.New(io.MultiWriter(config.ControlLogFile),
+			"", log.LstdFlags),
+		// generate an execution-specific token
+		jwtSecret: getHash(fmt.Sprintf("%v-%v",
+			secrets["SIGN_KEY"], time.Now().Unix())),
+		refreshSecret: secrets["REFRESH_KEY"],
+	}
+
+	// initialize jwt middleware
+	appc.jwtMdw = jwt.New(jwt.Config{
+		// Extract by "token" url parameter.
+		Extractor: jwt.FromAuthHeader,
+		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
+			return appc.jwtSecret, nil
+		},
+		Expiration:    true,
+		SigningMethod: jwt.SigningMethodHS256,
+		ErrorHandler:  appc.UnauthorizedHandler,
+	})
 
 	return &appc
 }
@@ -36,26 +82,92 @@ func (appc *AppController) Ping(ctx iris.Context) {
 
 /* ======= LOGIN MANAGEMENT ======= */
 func (appc *AppController) RequireLogin(ctx iris.Context) {
-	// TODO: implement login capabilities!
-	if false {
-		appc.Unauthorized(ctx)
-		ctx.EndRequest()
-	} else {
-		// move forward the execution of request chain
-		ctx.Next()
+	if err := appc.jwtMdw.CheckJWT(ctx); err != nil {
+		appc.jwtMdw.Config.ErrorHandler(ctx, err)
+		return
 	}
+
+	// TODO: should you implement something else here (e.g. veridy iat)?
+
+	// If everything ok then call next.
+	ctx.Next()
 }
 
 func (appc *AppController) Login(ctx iris.Context) {
-	appc.UnauthorizedMessage(ctx, "login function not implemented yet")
+	var user dbconn.Login
+	if err := ctx.ReadJSON(&user); err != nil {
+		appc.InternalErrorMessage(ctx, "impossible to read login credentials")
+		ctx.ResponseWriter().FlushResponse()
+		ctx.ResponseWriter().EndResponse()
+		return
+	}
+
+	isAdm, err := appc.dbc.VerifyCredentials(user.Username, user.Password)
+
+	if err != nil {
+		appc.UnauthorizedMessage(ctx, err.Error())
+	} else {
+		token := jwt.NewTokenWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"user":     user.Username,
+			"is_admin": isAdm,
+			"iss":      "FdP Server",
+			"exp":      time.Now().Add(time.Minute * 30).Unix(),
+			"iat":      time.Now().Unix(),
+			"typ":      "JWT",
+		})
+
+		signedToken, _ := token.SignedString(appc.jwtSecret)
+
+		_, _ = ctx.JSON(iris.Map{
+			"token":  signedToken,
+			"status": iris.StatusOK,
+			"msg":    "correct login performed",
+		})
+	}
 }
 
 func (appc *AppController) Logout(ctx iris.Context) {
-	appc.BadRequestMessage(ctx, "logout function not implemented yet")
+	msg := "logout function not implemented yet"
+	appc.logger.Println(ctx.Path() + " - " + msg)
+	ctx.StatusCode(iris.StatusNotImplemented)
+	_, _ = ctx.JSON(iris.Map{
+		"status": iris.StatusNotImplemented,
+		"msg":    msg,
+	})
 }
 
 func (appc *AppController) IsAdmin(ctx iris.Context) {
-	ctx.Next() // ignore for the moment this function
+	tokenRaw, err := jwt.FromAuthHeader(ctx)
+
+	if err != nil {
+		ctx.EndRequest()
+		ctx.ResponseWriter().FlushResponse()
+		ctx.ResponseWriter().EndResponse()
+		appc.ForbiddenMessage(ctx, "current user is not an administrator")
+
+		return
+	}
+
+	token, err := jwtgo.Parse(tokenRaw, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwtgo.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("issue with signing method")
+		}
+		return appc.jwtSecret, nil
+	})
+
+	if err != nil {
+		appc.InternalErrorMessage(ctx, "error parsing authorization token details")
+		return
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		if isAdmin := claims["is_admin"].(bool); isAdmin {
+			ctx.Next()
+			return
+		}
+	}
+
+	appc.UnauthorizedMessage(ctx, "current user can not perform administrator actions")
 }
 
 /* ======= TICKETS MANAGEMENT ======= */
@@ -383,6 +495,26 @@ func (appc *AppController) UnauthorizedMessage(ctx iris.Context, msg string) {
 	ctx.StatusCode(iris.StatusUnauthorized)
 	_, _ = ctx.JSON(iris.Map{
 		"status": iris.StatusUnauthorized,
+		"msg":    msg,
+	})
+}
+func (appc *AppController) UnauthorizedHandler(ctx iris.Context, err error) {
+	appc.logger.Println(ctx.Path() + " - " + err.Error())
+	ctx.StatusCode(iris.StatusUnauthorized)
+	_, _ = ctx.JSON(iris.Map{
+		"status": iris.StatusUnauthorized,
+		"msg":    "required authorization token not found",
+	})
+}
+
+func (appc *AppController) Forbidden(ctx iris.Context) {
+	appc.ForbiddenMessage(ctx, "You do not have permissions to access this resource.")
+}
+func (appc *AppController) ForbiddenMessage(ctx iris.Context, msg string) {
+	appc.logger.Println(ctx.Path() + " - " + msg)
+	ctx.StatusCode(iris.StatusForbidden)
+	_, _ = ctx.JSON(iris.Map{
+		"status": iris.StatusForbidden,
 		"msg":    msg,
 	})
 }

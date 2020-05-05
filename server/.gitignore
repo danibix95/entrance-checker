@@ -18,7 +18,7 @@ vendor/
 .idea
 
 # Private data
-postgres_info
+app_secrets
 
 # Log data
 logs
