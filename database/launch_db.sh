@@ -9,4 +9,4 @@
 #
 # but it currently does not work due to issue with file permissions / SELinux
 
-docker run --rm -d -p 5432:5432 --name fdp-db-docker fdp_db:latest
+docker run --rm -d -p 5432:5432 -h db --name fdp-db-docker fdp_db:latest

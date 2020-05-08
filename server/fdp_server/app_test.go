@@ -9,10 +9,10 @@ import (
 )
 
 func TestPrepareApp(t *testing.T) {
-	testConf := controller.AppConfig{SecretsFile: "app_secrets"}
+	testConf := controller.AppConfig{SecretsFile: ".app_secrets"}
 
 	app := prepareApp(testConf)
-	var e *httptest.Expect = httptest.New(t, app)
+	e := httptest.New(t, app)
 
 	e.GET("/").Expect().Status(httptest.StatusNotFound)
 

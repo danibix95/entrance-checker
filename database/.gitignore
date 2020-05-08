@@ -1,5 +1,5 @@
 # database and private files
-postgres_data
+db-data
 *.real.csv
 csv/fdp_staff.txt
 

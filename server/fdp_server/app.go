@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/danibix95/fdp_server/controller"
 	"github.com/danibix95/fdp_server/dbconn"
 	"github.com/kataras/iris/v12"
@@ -98,13 +99,13 @@ func main() {
 	appConfig := controller.AppConfig{
 		ControlLogFile: controlLogFile,
 		DbLogFile:      dbLogFile,
-		SecretsFile:    "app_secrets",
+		SecretsFile:    ".app_secrets",
 	}
 
 	app = prepareApp(appConfig)
 
 	// with _ = it is possible to ignore the value returned by the method
-	_ = app.Run(iris.Addr(":8080"),
+	_ = app.Run(iris.Addr(fmt.Sprintf(":%v", os.Getenv("API_PORT"))),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithCharset("UTF-8"))
 }

@@ -7,6 +7,7 @@
 
 # Test binary, built with `go test -c`
 *.test
+!Dockerfile.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -18,7 +19,7 @@ vendor/
 .idea
 
 # Private data
-app_secrets
+.app_secrets
 
 # Log data
 logs

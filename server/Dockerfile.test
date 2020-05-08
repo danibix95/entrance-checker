@@ -21,11 +21,11 @@ RUN go mod download && go mod verify
 
 # copy application files (excluding everithing reported in the .dockerignore file)
 COPY fdp_server/app.go .
+COPY fdp_server/app_test.go .
 COPY fdp_server/controller ./controller
 COPY fdp_server/dbconn ./dbconn
 
-# retrieve app dependencies and build it
-RUN GOOS=linux go install -a -installsuffix cgo
+RUN GOOS=linux go test -v -cover -c -o prepareApp.test
 
 
 ## Component 2: deploy the application ##
@@ -36,7 +36,6 @@ RUN apk add --no-cache tzdata
 RUN cp /usr/share/zoneinfo/Europe/Rome /etc/localtime && echo "Europe/Rome" > /etc/timezone && date
 
 ENV GOBIN /app/bin
-ENV API_PORT 3000
 
 # Import the user and group files from the builder.
 RUN addgroup fdp_user && adduser -D -g '' -G fdp_user fdp_user
@@ -44,17 +43,19 @@ RUN addgroup fdp_user && adduser -D -g '' -G fdp_user fdp_user
 WORKDIR /app/
 
 # copy application binary file
-COPY --from=builder $GOBIN/fdp_server .
+COPY --from=builder /app/fdp_server/prepareApp.test .
 COPY .app_secrets .
 
-EXPOSE $API_PORT
+RUN echo "#!/bin/sh" >> execute_test.sh
+RUN echo "./prepareApp.test -test.v -test.coverprofile test.cov -test.run TestPrepareApp && cat test.cov" >> execute_test.sh
+RUN chmod +x execute_test.sh
 
 # prepare the environment for the execution
-RUN mkdir logs
 RUN chmod 400 /app/.app_secrets
 RUN chown fdp_user:fdp_user -R /app/
 
 # Use an unprivileged user to run the application
 USER fdp_user
 
-ENTRYPOINT ["./fdp_server"]
+ENTRYPOINT ["/bin/sh"]
+CMD ["execute_test.sh"]

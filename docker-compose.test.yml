@@ -3,11 +3,7 @@ services:
     api:
         build:
             context: ./server
-            dockerfile: Dockerfile
-        ports:
-            - "3000:3000"
-        volumes:
-            - ./server/logs:/app/logs
+            dockerfile: Dockerfile.test
         networks:
             - backend
         depends_on:
@@ -16,21 +12,23 @@ services:
             - SYSLOG
         cap_drop:
             - SYS_ADMIN
-        restart: on-failure
+        restart: "no"
     db:
         build:
             context: ./database
-            dockerfile: Dockerfile
-        ports:
-            - "5432:5432"
+            dockerfile: Dockerfile.test
+        expose:
+            - "5432"
         volumes:
-            - db-data:/var/lib/postgresql/data
+            - db-data-test:/var/lib/postgresql/data
         networks:
             - backend
         cap_add:
             - SYSLOG
         cap_drop:
             - SYS_ADMIN
+        logging:
+            driver: none
         restart: on-failure
 
 networks:
@@ -38,4 +36,4 @@ networks:
     backend:
 
 volumes:
-    db-data:
+    db-data-test:
