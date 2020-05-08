@@ -87,7 +87,7 @@ func (appc *AppController) RequireLogin(ctx iris.Context) {
 		return
 	}
 
-	// TODO: should you implement something else here (e.g. veridy iat)?
+	// TODO: should you implement something else here (e.g. verify iat)?
 
 	// If everything ok then call next.
 	ctx.Next()
