@@ -1,0 +1,8 @@
+# database and private files
+db-data
+*.real.csv
+csv
+csv/fdp_staff.txt
+
+# here is contained the password for database user
+postgres-passwd 
