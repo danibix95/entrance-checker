@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+        - "3000:3000"
+    environment:
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@db:5432/${DATABASE_NAME}
+    networks:
+        - app
+    depends_on:
+        - db
+    # restart: on-failure
+  db:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - app
+    restart: on-failure
+
+networks:
+  app:
+
+volumes:
+  db-data:
