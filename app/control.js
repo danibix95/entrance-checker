@@ -20,7 +20,7 @@ class Control {
     // if a user has already logged in,
     // then bring it directly to dashboard
     logger.debug({ session: request.session })
-    if (request.session.cookie) {
+    if (request.session.user) {
       response.redirect('/home')
     } else {
       // otherwise go to login page
@@ -32,7 +32,7 @@ class Control {
   requireLogin(request, response, next) {
     // if it is not present a user, require to set one
     logger.debug({ session: request.session })
-    if (!request.session.cookie) {
+    if (!request.session.user) {
       response.redirect('/')
     } else {
       // otherwise go to the requested page
@@ -109,15 +109,15 @@ class Control {
   // logout
   logout(request, response) {
     // save username for log purpose
-    const { username } = request.session
+    const { user } = request.session
 
     function callback(error) {
       // if it get some error track it,
       // otherwise send user to homepage
       if (error) {
-        logger.warn({ user: username, error }, 'get an error at logging out user')
+        logger.warn({ user, error }, 'get an error at logging out user')
       } else {
-        logger.info({ user: username }, 'user logged out')
+        logger.info({ user }, 'user logged out')
       }
       response.redirect('/')
     }
