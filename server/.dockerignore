@@ -1,0 +1,12 @@
+debug/
+target/
+
+**/*.rs.bk
+*.pdb
+
+*.env*
+*.log*
+
+.gitignore
+.dockerignore
+Dockerfile
