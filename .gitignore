@@ -4,3 +4,6 @@
 
 *.env*
 *.log*
+
+# local development files
+.dev

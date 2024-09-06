@@ -1,0 +1,14 @@
+services:
+  database:
+    image: postgres:16
+    shm_size: 256Mb
+    deploy:
+      resources:
+        limits:
+          memory: 500Mb
+          cpus: "1"
+    environment:
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres-passwd
+    volumes:
+      - ../.dev/postgres_passwd:/run/secrets/postgres-passwd
+
